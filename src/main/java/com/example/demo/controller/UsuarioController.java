@@ -3,16 +3,26 @@ package com.example.demo.controller;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.model.Usuario;
 import com.example.demo.service.UsuarioService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
+
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/usuarios")
 @AllArgsConstructor
+@Validated
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
@@ -32,23 +42,51 @@ public class UsuarioController {
         return ResponseEntity.ok(dtos);
     }
 
-    // POST
+    // POST (recibe DTO, mapea a entidad y guarda)
     @PostMapping
-    public ResponseEntity<UsuarioDTO> crearUsuario(@RequestBody Usuario usuario) {
-        Usuario guardado = usuarioService.guardarUsuario(usuario);
-        return ResponseEntity.ok(convertirADTO(guardado));
-    }
+    public ResponseEntity<List<UsuarioDTO>> crearUsuarios(HttpServletRequest request) throws IOException {
+        String body = request.getReader().lines().collect(Collectors.joining());
+        ObjectMapper mapper = new ObjectMapper();
+        List<UsuarioDTO> usuarios;
+        if (body.trim().startsWith("[")) {
+            usuarios = mapper.readValue(body, new TypeReference<List<UsuarioDTO>>() {});
+        } else {
+            UsuarioDTO u = mapper.readValue(body, UsuarioDTO.class);
+            usuarios = Collections.singletonList(u);
+        }
 
-    // PUT todos
-    @PutMapping
-    public ResponseEntity<List<UsuarioDTO>> actualizarTodos(@RequestBody List<Usuario> usuarios) {
-        List<UsuarioDTO> actualizados = usuarios.stream()
+        List<UsuarioDTO> creados = usuarios.stream()
+                .map(this::convertirAEntidad)
                 .map(usuarioService::guardarUsuario)
                 .map(this::convertirADTO)
+                .peek(dto -> dto.setContrasena(null))
                 .collect(Collectors.toList());
 
+        return ResponseEntity.status(HttpStatus.CREATED).body(creados);
+    }
+
+
+    // PUT todos (recibe lista de DTOs, mapea, guarda y devuelve DTOs)
+    @PutMapping
+    public ResponseEntity<List<UsuarioDTO>> actualizarTodos(HttpServletRequest request) throws IOException {
+        String body = request.getReader().lines().collect(Collectors.joining());
+        ObjectMapper mapper = new ObjectMapper();
+        List<UsuarioDTO> usuarios;
+        if (body.trim().startsWith("[")) {
+            usuarios = mapper.readValue(body, new TypeReference<List<UsuarioDTO>>() {});
+        } else {
+            UsuarioDTO u = mapper.readValue(body, UsuarioDTO.class);
+            usuarios = Collections.singletonList(u);
+        }
+        List<UsuarioDTO> actualizados = usuarios.stream()
+                .map(this::convertirAEntidad)
+                .map(usuarioService::guardarUsuario)
+                .map(this::convertirADTO)
+                .peek(dto -> dto.setContrasena(null))
+                .collect(Collectors.toList());
         return ResponseEntity.ok(actualizados);
     }
+
 
     // DELETE todos
     @DeleteMapping
@@ -57,13 +95,13 @@ public class UsuarioController {
         return ResponseEntity.noContent().build();
     }
 
-    // Conversión a DTO
+    // Conversión entidad -> DTO
     private UsuarioDTO convertirADTO(Usuario u) {
         return UsuarioDTO.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
                 .usuario(u.getUsuario())
-                .contrasena(u.getContrasena())
+                .contrasena(null)
                 .correo(u.getCorreo())
                 .descripcion(u.getDescripcion())
                 .fotoPerfil(u.getFotoPerfil())
@@ -71,5 +109,21 @@ public class UsuarioController {
                 .redesSociales(u.getRedesSociales())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .build();
+    }
+
+    // Conversión DTO -> entidad
+    private Usuario convertirAEntidad(UsuarioDTO dto) {
+        Usuario u = new Usuario();
+        u.setIdUsuario(dto.getIdUsuario());
+        u.setNombreCompleto(dto.getNombreCompleto());
+        u.setUsuario(dto.getUsuario());
+        u.setContrasena(dto.getContrasena());
+        u.setCorreo(dto.getCorreo());
+        u.setDescripcion(dto.getDescripcion());
+        u.setFotoPerfil(dto.getFotoPerfil());
+        u.setTelefono(dto.getTelefono());
+        u.setRedesSociales(dto.getRedesSociales());
+        u.setFechaNacimiento(dto.getFechaNacimiento());
+        return u;
     }
 }
