@@ -1,7 +1,10 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.CategoriaUsuariosDto;
+import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
+import com.example.demo.model.Usuario;
 import com.example.demo.service.CategoriaUsuariosService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -17,8 +20,29 @@ public class CategoriaUsuariosController {
     private CategoriaUsuariosService service;
 
     @PostMapping
-    public ResponseEntity<CategoriaUsuarios> crear(@RequestBody CategoriaUsuarios cu) {
-        return ResponseEntity.ok(service.guardar(cu));
+    public ResponseEntity<CategoriaUsuarios> crear(@RequestBody CategoriaUsuariosDto dto) {
+
+        // ID compuesto
+        CategoriaUsuariosID id = new CategoriaUsuariosID(
+                dto.getIdUsuario(),
+                dto.getIdCategoria()
+        );
+
+        // Referencias a Usuario y Categoria (solo ID)
+        Usuario u = new Usuario();
+        u.setIdUsuario(dto.getIdUsuario());
+
+        Categoria c = new Categoria();
+        c.setIdCategoria(dto.getIdCategoria());
+
+        // Construimos la entidad
+        CategoriaUsuarios cu = new CategoriaUsuarios();
+        cu.setId(id);
+        cu.setUsuario(u);
+        cu.setCategoria(c);
+
+        CategoriaUsuarios guardado = service.guardar(cu);
+        return ResponseEntity.ok(guardado);
     }
 
     @GetMapping
@@ -26,16 +50,22 @@ public class CategoriaUsuariosController {
         return service.listar();
     }
 
-    @GetMapping("/{idUsuario}/{idCategoria}")
-    public ResponseEntity<CategoriaUsuarios> obtener(@PathVariable Integer idUsuario, @PathVariable Integer idCategoria) {
+    @GetMapping("/buscar")
+    public ResponseEntity<CategoriaUsuarios> obtener(
+            @RequestParam Integer idUsuario,
+            @RequestParam Integer idCategoria) {
+
         CategoriaUsuariosID id = new CategoriaUsuariosID(idUsuario, idCategoria);
         return service.buscarPorId(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/{idUsuario}/{idCategoria}")
-    public ResponseEntity<Void> eliminar(@PathVariable Integer idUsuario, @PathVariable Integer idCategoria) {
+    @DeleteMapping
+    public ResponseEntity<Void> eliminar(
+            @RequestParam Integer idUsuario,
+            @RequestParam Integer idCategoria) {
+
         CategoriaUsuariosID id = new CategoriaUsuariosID(idUsuario, idCategoria);
         service.eliminar(id);
         return ResponseEntity.noContent().build();

@@ -1,7 +1,10 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.CategoriaServiciosDto;
+import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.CategoriaServiciosID;
+import com.example.demo.model.Servicio;
 import com.example.demo.service.CategoriaServiciosService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -16,26 +19,59 @@ public class CategoriaServiciosController {
     @Autowired
     private CategoriaServiciosService service;
 
+
     @PostMapping
-    public ResponseEntity<CategoriaServicios> crear(@RequestBody CategoriaServicios cs) {
-        return ResponseEntity.ok(service.guardar(cs));
+    public ResponseEntity<CategoriaServicios> crear(@RequestBody CategoriaServiciosDto dto) {
+
+        // ID compuesto
+        CategoriaServiciosID id = new CategoriaServiciosID(
+                dto.getIdServicio(),
+                dto.getIdCategoria()
+        );
+
+        // Referencias a Servicio y Categoria (solo IDs)
+        Servicio s = new Servicio();
+
+        s.setIdServicio(dto.getIdServicio());
+
+
+        Categoria c = new Categoria();
+        c.setIdCategoria(dto.getIdCategoria());
+
+        // Construimos la entidad
+        CategoriaServicios cs = new CategoriaServicios();
+        cs.setId(id);
+        cs.setServicio(s);
+        cs.setCategoria(c);
+
+        CategoriaServicios guardado = service.guardar(cs);
+        return ResponseEntity.ok(guardado);
     }
+
 
     @GetMapping
     public List<CategoriaServicios> todos() {
         return service.listar();
     }
 
-    @GetMapping("/{idServicio}/{idCategoria}")
-    public ResponseEntity<CategoriaServicios> obtener(@PathVariable Integer idServicio, @PathVariable Integer idCategoria) {
+
+    @GetMapping("/buscar")
+    public ResponseEntity<CategoriaServicios> obtener(
+            @RequestParam Integer idServicio,
+            @RequestParam Integer idCategoria) {
+
         CategoriaServiciosID id = new CategoriaServiciosID(idServicio, idCategoria);
         return service.buscarPorId(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/{idServicio}/{idCategoria}")
-    public ResponseEntity<Void> eliminar(@PathVariable Integer idServicio, @PathVariable Integer idCategoria) {
+
+    @DeleteMapping
+    public ResponseEntity<Void> eliminar(
+            @RequestParam Integer idServicio,
+            @RequestParam Integer idCategoria) {
+
         CategoriaServiciosID id = new CategoriaServiciosID(idServicio, idCategoria);
         service.eliminar(id);
         return ResponseEntity.noContent().build();
