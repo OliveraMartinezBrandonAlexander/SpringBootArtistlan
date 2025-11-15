@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
-import java.sql.Date;
+import java.time.LocalDate;
 
 @Data
 @Builder
@@ -21,5 +21,6 @@ public class UsuarioDTO {
     private String fotoPerfil;
     private String telefono;
     private String redesSociales;
-    private Date fechaNacimiento;
+    private LocalDate fechaNacimiento;
+    private Integer adminUsuario;
 }

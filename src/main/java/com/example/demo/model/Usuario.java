@@ -6,8 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.sql.Date;
+import java.time.LocalDate;
 
 @Data
 @AllArgsConstructor
@@ -47,9 +46,9 @@ public class Usuario {
     private String redesSociales;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-    @Temporal(TemporalType.DATE)
     @Column(name = "FECHA_NACIMIENTO")
-    private Date fechaNacimiento;
+    private LocalDate fechaNacimiento;
+
 
     @Column(name = "ADMIN_USUARIO")
     private int adminUsuario;

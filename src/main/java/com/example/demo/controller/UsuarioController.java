@@ -5,14 +5,14 @@ import com.example.demo.model.Usuario;
 import com.example.demo.service.UsuarioService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import jakarta.validation.Valid;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -26,6 +26,10 @@ import java.util.stream.Collectors;
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
+
+    private final ObjectMapper mapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     // GET todos
     @GetMapping
@@ -46,7 +50,7 @@ public class UsuarioController {
     @PostMapping
     public ResponseEntity<List<UsuarioDTO>> crearUsuarios(HttpServletRequest request) throws IOException {
         String body = request.getReader().lines().collect(Collectors.joining());
-        ObjectMapper mapper = new ObjectMapper();
+
         List<UsuarioDTO> usuarios;
         if (body.trim().startsWith("[")) {
             usuarios = mapper.readValue(body, new TypeReference<List<UsuarioDTO>>() {});
@@ -65,12 +69,10 @@ public class UsuarioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(creados);
     }
 
-
     // PUT todos (recibe lista de DTOs, mapea, guarda y devuelve DTOs)
     @PutMapping
     public ResponseEntity<List<UsuarioDTO>> actualizarTodos(HttpServletRequest request) throws IOException {
         String body = request.getReader().lines().collect(Collectors.joining());
-        ObjectMapper mapper = new ObjectMapper();
         List<UsuarioDTO> usuarios;
         if (body.trim().startsWith("[")) {
             usuarios = mapper.readValue(body, new TypeReference<List<UsuarioDTO>>() {});
@@ -86,7 +88,6 @@ public class UsuarioController {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(actualizados);
     }
-
 
     // DELETE todos
     @DeleteMapping
@@ -108,6 +109,7 @@ public class UsuarioController {
                 .telefono(u.getTelefono())
                 .redesSociales(u.getRedesSociales())
                 .fechaNacimiento(u.getFechaNacimiento())
+                .adminUsuario(u.getAdminUsuario())
                 .build();
     }
 
@@ -124,6 +126,7 @@ public class UsuarioController {
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
+        u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
         return u;
     }
 }
