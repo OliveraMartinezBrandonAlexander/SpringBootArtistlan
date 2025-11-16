@@ -13,7 +13,7 @@ import java.util.Optional;
 
 @AllArgsConstructor
 @Service
-public class CategoriaUsuariosServiceImpl extends CategoriaUsuariosService {
+public class  CategoriaUsuariosServiceImpl extends CategoriaUsuariosService {
 
     @Autowired
     private final CategoriaUsuariosRepository repo;
