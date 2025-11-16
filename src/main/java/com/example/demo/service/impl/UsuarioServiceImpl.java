@@ -54,4 +54,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
         return false;
     }
+
+    @Override
+    public List<Usuario> listarAdmins() {
+        return repo.findAdmins(); // solo admins
+    }
 }
