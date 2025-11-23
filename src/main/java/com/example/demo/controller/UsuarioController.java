@@ -1,5 +1,5 @@
 package com.example.demo.controller;
-
+import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.model.Usuario;
 import com.example.demo.service.UsuarioService;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
+    private final UsuarioRepository usuarioRepository;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -94,6 +96,22 @@ public class UsuarioController {
     public ResponseEntity<Void> eliminarTodos() {
         usuarioService.todosUsuarios().forEach(u -> usuarioService.eliminarUsuario(u.getIdUsuario()));
         return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/login")
+    public ResponseEntity<?> login(
+            @RequestParam String usuario,
+            @RequestParam String correo,
+            @RequestParam String contrasena
+    ) {
+        Optional<Usuario> user = usuarioRepository
+                .findByUsuarioAndCorreoAndContrasena(usuario, correo, contrasena);
+
+        if (user.isPresent()) {
+            return ResponseEntity.ok(user.get());
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Credenciales incorrectas");
+        }
     }
 
     // Conversión entidad -> DTO

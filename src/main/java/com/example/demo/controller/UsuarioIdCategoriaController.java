@@ -18,7 +18,7 @@ public class UsuarioIdCategoriaController {
 
     private final UsuarioIdCategoriaService service;
 
-    // GET: Obtener todas las categorías de un usuario (formato especial)
+    // GET: Obtener todas las categorías de un usuario
     @GetMapping("{usuarioId}")
     public List<Map<String, Object>> obtenerCategoriasPorUsuario(@PathVariable Integer usuarioId) {
         List<UsuarioIdCategoriaDTO> categorias = service.obtenerTodasCategoriasPorUsuario(usuarioId);
