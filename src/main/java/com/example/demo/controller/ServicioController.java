@@ -68,7 +68,12 @@ public class ServicioController {
                 .descripcion(s.getDescripcion())
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
-                .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)
+                .idUsuario(
+                        s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null
+                )
+                .nombreUsuario(
+                        s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido"
+                )
                 .build();
     }
 }

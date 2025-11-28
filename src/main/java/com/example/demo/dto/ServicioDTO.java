@@ -12,4 +12,5 @@ public class ServicioDTO {
     private String contacto;
     private String tecnicas;
     private Integer idUsuario;
+    private String nombreUsuario;
 }
