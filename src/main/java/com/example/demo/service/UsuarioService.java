@@ -11,5 +11,6 @@ public interface UsuarioService {
     Optional<Usuario> actualizarUsuario(Integer id, Usuario datos);
     boolean eliminarUsuario(Integer id);
     List<Usuario> listarAdmins();
+    Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto);
 
 }

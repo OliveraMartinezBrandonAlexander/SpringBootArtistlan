@@ -10,4 +10,5 @@ public interface ObraService {
     Optional<Obra> buscarPorId(Integer id);
     Optional<Obra> actualizarObra(Integer id, Obra obra);
     boolean eliminar(Integer id);
+    Optional<Obra> actualizarImagen1(Integer id, String urlImagen);
 }

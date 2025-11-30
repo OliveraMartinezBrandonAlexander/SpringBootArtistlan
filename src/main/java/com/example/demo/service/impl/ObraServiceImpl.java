@@ -56,4 +56,12 @@ public class ObraServiceImpl implements ObraService {
         }
         return false;
     }
+
+    @Override
+    public Optional<Obra> actualizarImagen1(Integer id, String urlImagen) {
+        return repo.findById(id).map(o -> {
+            o.setImagen1(urlImagen);
+            return repo.save(o);
+        });
+    }
 }

@@ -1,4 +1,5 @@
 package com.example.demo.controller;
+import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.model.Usuario;
@@ -112,6 +113,16 @@ public class UsuarioController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body("Credenciales incorrectas");
         }
+    }
+
+    @PutMapping("/{id}/foto-perfil")
+    public ResponseEntity<Usuario> actualizarFotoPerfil(
+            @PathVariable Integer id,
+            @RequestBody ActualizarFotoPerfilRequestDTO requestDTO
+            ) {
+        return usuarioService.actualizarFotoPerfil(id, requestDTO.getFotoPerfil())
+                .map(ResponseEntity::ok)        //200 + usuario actualizado
+                .orElse(ResponseEntity.notFound().build());     //404 si no existe
     }
 
     // Conversión entidad -> DTO

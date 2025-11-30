@@ -59,4 +59,12 @@ public class UsuarioServiceImpl implements UsuarioService {
     public List<Usuario> listarAdmins() {
         return repo.findAdmins(); // solo admins
     }
+
+    @Override
+    public Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto) {
+        return repo.findById(id).map(u -> {
+            u.setFotoPerfil(urlFoto);
+            return repo.save(u);
+        });
+    }
 }

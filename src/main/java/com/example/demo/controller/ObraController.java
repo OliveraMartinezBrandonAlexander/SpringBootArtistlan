@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ActualizarImagenObraRequestDTO;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.model.Obra;
 import com.example.demo.service.ObraService;
@@ -58,6 +59,16 @@ public class ObraController {
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
         boolean eliminado = service.eliminar(id);
         return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
+
+    @PutMapping("/{id}/imagen1")
+    public ResponseEntity<Obra> actualizarImagen1(
+            @PathVariable Integer id,
+            @RequestBody ActualizarImagenObraRequestDTO requestDTO
+            ) {
+        return service.actualizarImagen1(id, requestDTO.getImagen1())
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     // Conversión a DTO
