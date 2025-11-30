@@ -1,11 +1,13 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ObraDTO;
+import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.UsuarioService;
 import lombok.AllArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,17 +22,13 @@ public class ObrasDeUsuarioController {
     private final ObraService obraService;
     private final UsuarioService usuarioService;
 
-    // GET - Obtener todas las obras de un usuario específico
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<ObraDTO>> obtenerObrasPorUsuario(@PathVariable Integer usuarioId) {
-        // Verificar si el usuario existe
-        Usuario usuario = usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Obtener todas las obras y filtrar por usuario
-        List<Obra> obras = obraService.listar().stream()
-                .filter(o -> o.getUsuario().getIdUsuario().equals(usuarioId))
-                .collect(Collectors.toList());
+        usuarioService.buscarPorId(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
+
+        List<Obra> obras = obraService.buscarPorUsuarioId(usuarioId);
 
         if (obras.isEmpty()) {
             return ResponseEntity.noContent().build();
@@ -43,92 +41,98 @@ public class ObrasDeUsuarioController {
         return ResponseEntity.ok(dtos);
     }
 
-    // POST - Crear una nueva obra para un usuario específico
+    // --- 2. POST - Crear una nueva obra para un usuario específico
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ObraDTO> crearObraParaUsuario(
             @PathVariable Integer usuarioId,
-            @RequestBody Obra obra) {
+            @RequestBody ObraDTO obraDTO) {
 
-        // Verificar que el usuario existe
-        Usuario usuario = usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        // Verifica que el usuario existe antes de intentar guardar la obra
+        usuarioService.buscarPorId(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
 
-        // Asignar el usuario a la obra
-        obra.setUsuario(usuario);
-        Obra guardada = obraService.guardar(obra);
+        // Asume que este método del servicio ya hace la vinculación con el usuario y la categoría.
+        Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
 
-        return ResponseEntity.ok(convertirADTO(guardada));
+        return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada));
     }
 
-    // PUT - Actualizar una obra específica de un usuario
     @PutMapping("/{usuarioId}/{obraId}")
     public ResponseEntity<ObraDTO> actualizarObraDeUsuario(
             @PathVariable Integer usuarioId,
             @PathVariable Integer obraId,
-            @RequestBody Obra obraActualizada) {
+            @RequestBody ObraDTO obraDTO) {
 
-        // Verificar que la obra existe y pertenece al usuario
         Obra obraExistente = obraService.buscarPorId(obraId)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada"));
+                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + obraId));
+
 
         if (!obraExistente.getUsuario().getIdUsuario().equals(usuarioId)) {
-            return ResponseEntity.badRequest().build();
+
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        // Actualizar los campos de la obra
-        obraExistente.setTitulo(obraActualizada.getTitulo());
-        obraExistente.setDescripcion(obraActualizada.getDescripcion());
-        obraExistente.setEstado(obraActualizada.getEstado());
-        obraExistente.setPrecio(obraActualizada.getPrecio());
-        obraExistente.setImagen1(obraActualizada.getImagen1());
-        obraExistente.setImagen2(obraActualizada.getImagen2());
-        obraExistente.setImagen3(obraActualizada.getImagen3());
-        obraExistente.setTecnicas(obraActualizada.getTecnicas());
-        obraExistente.setMedidas(obraActualizada.getMedidas());
-        obraExistente.setLikes(obraActualizada.getLikes());
+
+        obraExistente.setTitulo(obraDTO.getTitulo());
+        obraExistente.setDescripcion(obraDTO.getDescripcion());
+        obraExistente.setEstado(obraDTO.getEstado());
+        obraExistente.setPrecio(obraDTO.getPrecio());
+        obraExistente.setImagen1(obraDTO.getImagen1());
+        obraExistente.setImagen2(obraDTO.getImagen2());
+        obraExistente.setImagen3(obraDTO.getImagen3());
+        obraExistente.setTecnicas(obraDTO.getTecnicas());
+        obraExistente.setMedidas(obraDTO.getMedidas());
 
         Obra actualizada = obraService.guardar(obraExistente);
         return ResponseEntity.ok(convertirADTO(actualizada));
     }
 
-    // DELETE - Eliminar una obra específica de un usuario
     @DeleteMapping("/{usuarioId}/{obraId}")
     public ResponseEntity<Void> eliminarObraDeUsuario(
             @PathVariable Integer usuarioId,
             @PathVariable Integer obraId) {
 
-        // Verificar que la obra existe y pertenece al usuario
         Obra obra = obraService.buscarPorId(obraId)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada"));
+                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + obraId));
 
         if (!obra.getUsuario().getIdUsuario().equals(usuarioId)) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         obraService.eliminar(obraId);
         return ResponseEntity.noContent().build();
     }
 
-    // DELETE - Eliminar todas las obras de un usuario
     @DeleteMapping("/{usuarioId}")
     public ResponseEntity<Void> eliminarTodasLasObrasDeUsuario(@PathVariable Integer usuarioId) {
         // Verificar que el usuario existe
-        Usuario usuario = usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        usuarioService.buscarPorId(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
 
-        // Obtener y eliminar todas las obras del usuario
-        List<Obra> obras = obraService.listar().stream()
-                .filter(o -> o.getUsuario().getIdUsuario().equals(usuarioId))
-                .collect(Collectors.toList());
-
-        obras.forEach(o -> obraService.eliminar(o.getIdObra()));
+        obraService.eliminarPorUsuarioId(usuarioId);
 
         return ResponseEntity.noContent().build();
     }
 
-    // Método auxiliar para convertir entidad a DTO
+    // ⭐️ MÉTODO AUXILIAR ACTUALIZADO: Incluye idCategoria
     private ObraDTO convertirADTO(Obra o) {
         Integer idUsuario = (o.getUsuario() != null) ? o.getUsuario().getIdUsuario() : null;
+
+        String nombreAutor = (o.getUsuario() != null) ? o.getUsuario().getUsuario() : "Desconocido";
+
+
+        Integer idCategoria = null;
+        String nombreCategoria = "Sin Categoría";
+
+        if (o.getCategoriaObras() != null && !o.getCategoriaObras().isEmpty()) {
+            // Asumiendo que solo manejas una categoría principal para el DTO.
+            CategoriaObras co = o.getCategoriaObras().iterator().next();
+            if (co.getCategoria() != null) {
+                idCategoria = co.getCategoria().getIdCategoria();
+                nombreCategoria = co.getCategoria().getNombreCategoria();
+            }
+        }
+
         return ObraDTO.builder()
                 .idObra(o.getIdObra())
                 .titulo(o.getTitulo())
@@ -142,6 +146,10 @@ public class ObrasDeUsuarioController {
                 .medidas(o.getMedidas())
                 .likes(o.getLikes())
                 .idUsuario(idUsuario)
+                // Se incluyen los nuevos campos poblados
+                .idCategoria(idCategoria)
+                .nombreAutor(nombreAutor)
+                .nombreCategoria(nombreCategoria)
                 .build();
     }
 }

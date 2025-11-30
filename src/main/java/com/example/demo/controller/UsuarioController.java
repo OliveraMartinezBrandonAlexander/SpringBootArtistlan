@@ -30,6 +30,7 @@ public class UsuarioController {
     private final UsuarioService usuarioService;
     private final UsuarioRepository usuarioRepository;
 
+
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -100,12 +101,22 @@ public class UsuarioController {
     }
     @GetMapping("/login")
     public ResponseEntity<?> login(
-            @RequestParam String usuario,
-            @RequestParam String correo,
+            @RequestParam String usuario, // Puede ser ""
+            @RequestParam String correo, // Puede ser ""
             @RequestParam String contrasena
     ) {
-        Optional<Usuario> user = usuarioRepository
-                .findByUsuarioAndCorreoAndContrasena(usuario, correo, contrasena);
+        Optional<Usuario> user;
+
+        if (!usuario.isEmpty()) {
+            // Priorizar búsqueda por Usuario si está presente
+            user = usuarioRepository.findByUsuarioAndContrasena(usuario, contrasena);
+        } else if (!correo.isEmpty()) {
+            // Si Usuario está vacío, buscar por Correo
+            user = usuarioRepository.findByCorreoAndContrasena(correo, contrasena);
+        } else {
+            // Ni usuario ni correo se proporcionaron
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Falta un identificador");
+        }
 
         if (user.isPresent()) {
             return ResponseEntity.ok(user.get());
@@ -114,15 +125,28 @@ public class UsuarioController {
                     .body("Credenciales incorrectas");
         }
     }
+    @GetMapping("/existe")
+    public ResponseEntity<String> existeUsuario(
+            @RequestParam String usuario,
+            @RequestParam String correo
+    ) {
 
-    @PutMapping("/{id}/foto-perfil")
-    public ResponseEntity<Usuario> actualizarFotoPerfil(
-            @PathVariable Integer id,
-            @RequestBody ActualizarFotoPerfilRequestDTO requestDTO
-            ) {
-        return usuarioService.actualizarFotoPerfil(id, requestDTO.getFotoPerfil())
-                .map(ResponseEntity::ok)        //200 + usuario actualizado
-                .orElse(ResponseEntity.notFound().build());     //404 si no existe
+        boolean usuarioExiste = usuarioRepository.existsByUsuario(usuario);
+        boolean correoExiste = usuarioRepository.existsByCorreo(correo);
+
+        if (usuarioExiste && correoExiste) {
+            // Ambos campos ya están en la base de datos
+            return ResponseEntity.ok("AMBOS_DUPLICADOS");
+        } else if (usuarioExiste) {
+            // Solo el nombre de usuario está duplicado
+            return ResponseEntity.ok("USUARIO_DUPLICADO");
+        } else if (correoExiste) {
+            // Solo el correo electrónico está duplicado
+            return ResponseEntity.ok("CORREO_DUPLICADO");
+        } else {
+            // Ninguno está duplicado
+            return ResponseEntity.ok("OK");
+        }
     }
 
     // Conversión entidad -> DTO

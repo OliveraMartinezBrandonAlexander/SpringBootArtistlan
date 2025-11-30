@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarImagenObraRequestDTO;
 import com.example.demo.dto.ObraDTO;
+import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
@@ -74,6 +75,19 @@ public class ObraController {
     // Conversión a DTO
     private ObraDTO convertirADTO(Obra o) {
         Integer idUsuario = (o.getUsuario() != null) ? o.getUsuario().getIdUsuario() : null;
+        String nombreAutor = (o.getUsuario() != null) ? o.getUsuario().getUsuario() : "Desconocido";
+
+        Integer idCategoria = null;
+        String nombreCategoria = "Sin Categoría";
+
+        if (o.getCategoriaObras() != null && !o.getCategoriaObras().isEmpty()) {
+            CategoriaObras co = o.getCategoriaObras().iterator().next();
+            if (co.getCategoria() != null) {
+                idCategoria = co.getCategoria().getIdCategoria();
+                nombreCategoria = co.getCategoria().getNombreCategoria();
+            }
+        }
+
         return ObraDTO.builder()
                 .idObra(o.getIdObra())
                 .titulo(o.getTitulo())
@@ -87,7 +101,9 @@ public class ObraController {
                 .medidas(o.getMedidas())
                 .likes(o.getLikes())
                 .idUsuario(idUsuario)
+                .idCategoria(idCategoria)
+                .nombreAutor(nombreAutor)
+                .nombreCategoria(nombreCategoria)
                 .build();
-
     }
 }
