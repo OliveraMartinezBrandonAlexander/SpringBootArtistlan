@@ -1,37 +1,42 @@
 package com.example.demo.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-@Builder
+import java.util.HashSet;
+import java.util.Set;
+
 @Entity
-@Table(name = "SERVICIO")
+@Table(name = "servicios")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Servicio {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ID_SERVICIO")
+    @Column(name = "id_servicio")
     private Integer idServicio;
 
-    @Column(name = "TITULO")
+    @Column(name = "titulo", length = 255)
     private String titulo;
 
-    @Column(name = "DESCRIPCION")
+    @Column(name = "descripcion", length = 255)
     private String descripcion;
 
-    @Column(name = "CONTACTO")
+    @Column(name = "contacto", length = 255)
     private String contacto;
 
-    @Column(name = "TECNICAS")
+    @Column(name = "tecnicas", length = 255)
     private String tecnicas;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ID_USUARIO", nullable = false)
+    @JoinColumn(name = "id_usuario", nullable = false)
     private Usuario usuario;
+
+    // Relación con tabla intermedia categoria_servicios
+    @OneToMany(mappedBy = "servicio", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<CategoriaServicios> categoriasServicios = new HashSet<>();
 }

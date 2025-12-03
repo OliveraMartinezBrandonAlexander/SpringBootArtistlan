@@ -1,79 +1,101 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.CategoriaServiciosDto;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaServicios;
-import com.example.demo.model.CategoriaServiciosID;
 import com.example.demo.model.Servicio;
-import com.example.demo.service.CategoriaServiciosService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.CategoriaServiciosRepository;
+import com.example.demo.repository.ServicioRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/categorias-servicios")
+@RequestMapping("/api/categoriaServicios")
+@RequiredArgsConstructor
 public class CategoriaServiciosController {
 
-    @Autowired
-    private CategoriaServiciosService service;
+    private final CategoriaServiciosRepository categoriaServiciosRepository;
+    private final ServicioRepository servicioRepository;
+    private final CategoriaRepository categoriaRepository;
 
-
-    @PostMapping
-    public ResponseEntity<CategoriaServicios> crear(@RequestBody CategoriaServiciosDto dto) {
-
-        // ID compuesto
-        CategoriaServiciosID id = new CategoriaServiciosID(
-                dto.getIdServicio(),
-                dto.getIdCategoria()
-        );
-
-        // Referencias a Servicio y Categoria (solo IDs)
-        Servicio s = new Servicio();
-
-        s.setIdServicio(dto.getIdServicio());
-
-
-        Categoria c = new Categoria();
-        c.setIdCategoria(dto.getIdCategoria());
-
-        // Construimos la entidad
-        CategoriaServicios cs = new CategoriaServicios();
-        cs.setId(id);
-        cs.setServicio(s);
-        cs.setCategoria(c);
-
-        CategoriaServicios guardado = service.guardar(cs);
-        return ResponseEntity.ok(guardado);
-    }
-
-
+    // GET: listar todas las relaciones
     @GetMapping
-    public List<CategoriaServicios> todos() {
-        return service.listar();
+    public ResponseEntity<List<CategoriaServicios>> obtenerTodas() {
+        List<CategoriaServicios> lista = categoriaServiciosRepository.findAll();
+        return new ResponseEntity<>(lista, HttpStatus.OK);
     }
 
+    // GET: obtener una relación por id
+    @GetMapping("/{id}")
+    public ResponseEntity<CategoriaServicios> obtenerPorId(@PathVariable Integer id) {
+        Optional<CategoriaServicios> csOpt = categoriaServiciosRepository.findById(id);
+        return csOpt
+                .map(cs -> new ResponseEntity<>(cs, HttpStatus.OK))
+                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
 
-    @GetMapping("/buscar")
-    public ResponseEntity<CategoriaServicios> obtener(
+    // POST: crear relación servicio–categoría
+    @PostMapping
+    public ResponseEntity<CategoriaServicios> crearRelacion(
             @RequestParam Integer idServicio,
             @RequestParam Integer idCategoria) {
 
-        CategoriaServiciosID id = new CategoriaServiciosID(idServicio, idCategoria);
-        return service.buscarPorId(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Optional<Servicio> servicioOpt = servicioRepository.findById(idServicio);
+        Optional<Categoria> categoriaOpt = categoriaRepository.findById(idCategoria);
+
+        if (servicioOpt.isEmpty() || categoriaOpt.isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        CategoriaServicios cs = CategoriaServicios.builder()
+                .servicio(servicioOpt.get())
+                .categoria(categoriaOpt.get())
+                .build();
+
+        CategoriaServicios guardado = categoriaServiciosRepository.save(cs);
+        return new ResponseEntity<>(guardado, HttpStatus.CREATED);
     }
 
-
-    @DeleteMapping
-    public ResponseEntity<Void> eliminar(
+    // PUT: actualizar relación (cambiar servicio y/o categoría)
+    @PutMapping("/{id}")
+    public ResponseEntity<CategoriaServicios> actualizarRelacion(
+            @PathVariable Integer id,
             @RequestParam Integer idServicio,
             @RequestParam Integer idCategoria) {
 
-        CategoriaServiciosID id = new CategoriaServiciosID(idServicio, idCategoria);
-        service.eliminar(id);
-        return ResponseEntity.noContent().build();
+        Optional<CategoriaServicios> csOpt = categoriaServiciosRepository.findById(id);
+        if (csOpt.isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+
+        Optional<Servicio> servicioOpt = servicioRepository.findById(idServicio);
+        Optional<Categoria> categoriaOpt = categoriaRepository.findById(idCategoria);
+
+        if (servicioOpt.isEmpty() || categoriaOpt.isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        CategoriaServicios cs = csOpt.get();
+        // OJO: aquí NO tocamos el id, solo actualizamos las referencias
+        cs.setServicio(servicioOpt.get());
+        cs.setCategoria(categoriaOpt.get());
+
+        CategoriaServicios actualizado = categoriaServiciosRepository.save(cs);
+        return new ResponseEntity<>(actualizado, HttpStatus.OK);
+    }
+
+    // DELETE: eliminar relación
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminarRelacion(@PathVariable Integer id) {
+        if (!categoriaServiciosRepository.existsById(id)) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        categoriaServiciosRepository.deleteById(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

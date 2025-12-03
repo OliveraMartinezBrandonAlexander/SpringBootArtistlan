@@ -1,23 +1,27 @@
 package com.example.demo.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
 
 @Entity
-@Table(name = "categoria_servicio")
-@Data
+@Table(name = "categoria_servicios")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class CategoriaServicios {
 
-    @EmbeddedId
-    private CategoriaServiciosID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_categoria_servicio")
+    private Integer idCategoriaServicio;
 
-    @ManyToOne
-    @MapsId("idServicio")
-    @JoinColumn(name = "id_servicio")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_servicio", nullable = false)
     private Servicio servicio;
 
-    @ManyToOne
-    @MapsId("idCategoria")
-    @JoinColumn(name = "id_categoria")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_categoria", nullable = false)
     private Categoria categoria;
 }

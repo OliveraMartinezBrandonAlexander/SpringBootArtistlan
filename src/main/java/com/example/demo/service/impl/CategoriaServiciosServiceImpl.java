@@ -1,7 +1,6 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.model.CategoriaServicios;
-import com.example.demo.model.CategoriaServiciosID;
 import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.service.CategoriaServiciosService;
 import lombok.AllArgsConstructor;
@@ -27,28 +26,32 @@ public class CategoriaServiciosServiceImpl implements CategoriaServiciosService 
     }
 
     @Override
-    public Optional<CategoriaServicios> buscarPorId(CategoriaServiciosID id) {
-        return repo.findById(id);
+    public Optional<CategoriaServicios> buscarPorId(Integer idCategoriaServicio) {
+        // Ahora el repositorio tiene clave Integer, no CategoriaServiciosID
+        return repo.findById(idCategoriaServicio);
     }
 
     @Override
-    public void eliminar(CategoriaServiciosID id) {
-        if (repo.existsById(id)) {
-            repo.deleteById(id);
+    public void eliminar(Integer idCategoriaServicio) {
+        if (repo.existsById(idCategoriaServicio)) {
+            repo.deleteById(idCategoriaServicio);
         }
     }
 
     @Override
     public List<CategoriaServicios> buscarPorServicio(Integer idServicio) {
+        // Ya no hay getId() ni CategoriaServiciosID, usamos directamente la relación ManyToOne
         return repo.findAll().stream()
-                .filter(cs -> cs.getId().getIdServicio().equals(idServicio))
+                .filter(cs -> cs.getServicio() != null
+                        && cs.getServicio().getIdServicio().equals(idServicio))
                 .toList();
     }
 
     @Override
     public List<CategoriaServicios> buscarPorCategoria(Integer idCategoria) {
         return repo.findAll().stream()
-                .filter(cs -> cs.getId().getIdCategoria().equals(idCategoria))
+                .filter(cs -> cs.getCategoria() != null
+                        && cs.getCategoria().getIdCategoria().equals(idCategoria))
                 .toList();
     }
 }

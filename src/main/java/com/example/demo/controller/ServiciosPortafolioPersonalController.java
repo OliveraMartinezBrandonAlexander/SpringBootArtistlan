@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ServicioDTO;
+import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
 import com.example.demo.model.Usuario;
 import com.example.demo.service.ServicioService;
@@ -39,19 +40,17 @@ public class ServiciosPortafolioPersonalController {
         return new ResponseEntity<>(servicios, HttpStatus.OK);
     }
 
-    // POST: Crear un nuevo servicio para un usuario
+    // POST: Crear un nuevo servicio para un usuario (recibe DTO desde Android)
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ServicioDTO> crearServicio(@PathVariable Integer usuarioId,
-                                                     @RequestBody Servicio servicio) {
+                                                     @RequestBody ServicioDTO servicioDTO) {
 
         Optional<Usuario> usuario = usuarioService.buscarPorId(usuarioId);
-
         if (usuario.isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
-        servicio.setUsuario(usuario.get());
-        Servicio creado = servicioService.guardarServicio(servicio);
+        Servicio creado = servicioService.crearServicioParaUsuario(usuarioId, servicioDTO);
 
         return new ResponseEntity<>(convertirADTO(creado), HttpStatus.CREATED);
     }
@@ -79,8 +78,20 @@ public class ServiciosPortafolioPersonalController {
                 : new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
-    // Conversión a DTO
+    // ========= Conversión a DTO =========
     private ServicioDTO convertirADTO(Servicio s) {
+
+        Integer idCategoria = null;
+        String nombreCategoria = null;
+
+        if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
+            CategoriaServicios cs = s.getCategoriasServicios().iterator().next();
+            if (cs.getCategoria() != null) {
+                idCategoria = cs.getCategoria().getIdCategoria();
+                nombreCategoria = cs.getCategoria().getNombreCategoria();
+            }
+        }
+
         return ServicioDTO.builder()
                 .idServicio(s.getIdServicio())
                 .titulo(s.getTitulo())
@@ -93,6 +104,8 @@ public class ServiciosPortafolioPersonalController {
                 .nombreUsuario(
                         s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido"
                 )
+                .idCategoria(idCategoria)
+                .categoria(nombreCategoria)
                 .build();
     }
 }
