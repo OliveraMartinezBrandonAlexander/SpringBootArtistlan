@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Table(name = "servicios")
+@Table(name = "servicio")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -36,7 +36,6 @@ public class Servicio {
     @JoinColumn(name = "id_usuario", nullable = false)
     private Usuario usuario;
 
-    // Relación con tabla intermedia categoria_servicios
     @OneToMany(mappedBy = "servicio", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<CategoriaServicios> categoriasServicios = new HashSet<>();
 }

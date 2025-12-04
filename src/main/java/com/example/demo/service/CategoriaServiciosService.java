@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.model.CategoriaServicios;
+import com.example.demo.model.CategoriaServiciosID;
 
 import java.util.List;
 import java.util.Optional;
@@ -11,11 +12,13 @@ public interface CategoriaServiciosService {
 
     List<CategoriaServicios> listar();
 
-    Optional<CategoriaServicios> buscarPorId(Integer idCategoriaServicio);
+    Optional<CategoriaServicios> buscarPorId(CategoriaServiciosID id);
 
-    void eliminar(Integer idCategoriaServicio);
+    void eliminar(CategoriaServiciosID id);
 
     List<CategoriaServicios> buscarPorServicio(Integer idServicio);
 
     List<CategoriaServicios> buscarPorCategoria(Integer idCategoria);
+
+
 }

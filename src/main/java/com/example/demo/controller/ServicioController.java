@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ServicioDTO;
+import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
@@ -40,8 +41,8 @@ public class ServicioController {
 
     // POST
     @PostMapping
-    public ResponseEntity<ServicioDTO> crear(@RequestBody Servicio servicio) {
-        Servicio guardado = service.guardarServicio(servicio);
+    public ResponseEntity<ServicioDTO> crear(@RequestBody ServicioDTO dto) {
+        Servicio guardado = service.crearServicioParaUsuario(dto.getIdUsuario(), dto);
         return ResponseEntity.ok(convertirADTO(guardado));
     }
 
@@ -62,18 +63,25 @@ public class ServicioController {
 
     // Conversión a DTO
     private ServicioDTO convertirADTO(Servicio s) {
-        return ServicioDTO.builder()
+
+        ServicioDTO.ServicioDTOBuilder builder = ServicioDTO.builder()
                 .idServicio(s.getIdServicio())
                 .titulo(s.getTitulo())
                 .descripcion(s.getDescripcion())
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
-                .idUsuario(
-                        s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null
-                )
-                .nombreUsuario(
-                        s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido"
-                )
-                .build();
+                .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)
+                .nombreUsuario(s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido");
+
+        if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
+            s.getCategoriasServicios().size();
+            CategoriaServicios cs = s.getCategoriasServicios().iterator().next();
+            if (cs.getCategoria() != null) {
+                builder.idCategoria(cs.getCategoria().getIdCategoria());
+                builder.categoria(cs.getCategoria().getNombreCategoria());
+            }
+        }
+
+        return builder.build();
     }
 }

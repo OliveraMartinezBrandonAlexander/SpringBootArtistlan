@@ -50,8 +50,6 @@ public class ObrasDeUsuarioController {
         // Verifica que el usuario existe antes de intentar guardar la obra
         usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
-
-        // Asume que este método del servicio ya hace la vinculación con el usuario y la categoría.
         Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada));
@@ -114,7 +112,6 @@ public class ObrasDeUsuarioController {
         return ResponseEntity.noContent().build();
     }
 
-    // ⭐️ MÉTODO AUXILIAR ACTUALIZADO: Incluye idCategoria
     private ObraDTO convertirADTO(Obra o) {
         Integer idUsuario = (o.getUsuario() != null) ? o.getUsuario().getIdUsuario() : null;
 

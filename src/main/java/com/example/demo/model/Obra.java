@@ -16,7 +16,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "OBRA")
+@Table(name = "obra")
 public class Obra {
 
     @Id

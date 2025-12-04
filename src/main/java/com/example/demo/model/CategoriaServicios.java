@@ -1,27 +1,29 @@
 package com.example.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "categoria_servicios")
-@Getter
-@Setter
+@Table(name = "categoria_servicio")
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class CategoriaServicios {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_categoria_servicio")
-    private Integer idCategoriaServicio;
+    @EmbeddedId
+    private CategoriaServiciosID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_servicio", nullable = false)
+    @ManyToOne
+    @MapsId("idServicio")
+    @JoinColumn(name = "id_servicio")
+    @JsonIgnore
     private Servicio servicio;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_categoria", nullable = false)
+    @ManyToOne
+    @MapsId("idCategoria")
+    @JoinColumn(name = "id_categoria")
+    @JsonBackReference
     private Categoria categoria;
 }

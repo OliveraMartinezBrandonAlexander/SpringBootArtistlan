@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -7,7 +8,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Table(name = "categorias")
+@Table(name = "categoria")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,5 +25,6 @@ public class Categoria {
     private String nombreCategoria;
 
     @OneToMany(mappedBy = "categoria", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private Set<CategoriaServicios> serviciosCategoria = new HashSet<>();
 }

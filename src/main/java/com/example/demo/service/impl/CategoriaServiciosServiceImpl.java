@@ -1,6 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.model.CategoriaServicios;
+import com.example.demo.model.CategoriaServiciosID;
 import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.service.CategoriaServiciosService;
 import lombok.AllArgsConstructor;
@@ -26,13 +27,12 @@ public class CategoriaServiciosServiceImpl implements CategoriaServiciosService 
     }
 
     @Override
-    public Optional<CategoriaServicios> buscarPorId(Integer idCategoriaServicio) {
-        // Ahora el repositorio tiene clave Integer, no CategoriaServiciosID
-        return repo.findById(idCategoriaServicio);
+    public Optional<CategoriaServicios> buscarPorId(CategoriaServiciosID id) {
+        return repo.findById(id);
     }
 
     @Override
-    public void eliminar(Integer idCategoriaServicio) {
+    public void eliminar(CategoriaServiciosID idCategoriaServicio) {
         if (repo.existsById(idCategoriaServicio)) {
             repo.deleteById(idCategoriaServicio);
         }
@@ -40,7 +40,6 @@ public class CategoriaServiciosServiceImpl implements CategoriaServiciosService 
 
     @Override
     public List<CategoriaServicios> buscarPorServicio(Integer idServicio) {
-        // Ya no hay getId() ni CategoriaServiciosID, usamos directamente la relación ManyToOne
         return repo.findAll().stream()
                 .filter(cs -> cs.getServicio() != null
                         && cs.getServicio().getIdServicio().equals(idServicio))

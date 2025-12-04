@@ -1,7 +1,9 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.CategoriaServiciosDto;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaServicios;
+import com.example.demo.model.CategoriaServiciosID;
 import com.example.demo.model.Servicio;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaServiciosRepository;
@@ -30,20 +32,28 @@ public class CategoriaServiciosController {
         return new ResponseEntity<>(lista, HttpStatus.OK);
     }
 
-    // GET: obtener una relación por id
-    @GetMapping("/{id}")
-    public ResponseEntity<CategoriaServicios> obtenerPorId(@PathVariable Integer id) {
-        Optional<CategoriaServicios> csOpt = categoriaServiciosRepository.findById(id);
+    // GET: obtener una relación por clave compuesta
+    @GetMapping("/buscar")
+    public ResponseEntity<CategoriaServicios> obtenerPorId(
+            @RequestParam Integer idServicio,
+            @RequestParam Integer idCategoria) {
+
+        CategoriaServiciosID clave = new CategoriaServiciosID(idServicio, idCategoria);
+
+        Optional<CategoriaServicios> csOpt = categoriaServiciosRepository.findById(clave);
+
         return csOpt
                 .map(cs -> new ResponseEntity<>(cs, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
-    // POST: crear relación servicio–categoría
+    // POST: crear relación
     @PostMapping
     public ResponseEntity<CategoriaServicios> crearRelacion(
-            @RequestParam Integer idServicio,
-            @RequestParam Integer idCategoria) {
+            @RequestBody CategoriaServiciosDto dto) {
+
+        Integer idServicio = dto.getIdServicio();
+        Integer idCategoria = dto.getIdCategoria();
 
         Optional<Servicio> servicioOpt = servicioRepository.findById(idServicio);
         Optional<Categoria> categoriaOpt = categoriaRepository.findById(idCategoria);
@@ -52,50 +62,34 @@ public class CategoriaServiciosController {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 
-        CategoriaServicios cs = CategoriaServicios.builder()
-                .servicio(servicioOpt.get())
-                .categoria(categoriaOpt.get())
-                .build();
+        CategoriaServiciosID clave = new CategoriaServiciosID(idServicio, idCategoria);
+
+        if (categoriaServiciosRepository.existsById(clave)) {
+            return new ResponseEntity<>(HttpStatus.CONFLICT);
+        }
+
+        CategoriaServicios cs = new CategoriaServicios();
+        cs.setId(clave);
+        cs.setServicio(servicioOpt.get());
+        cs.setCategoria(categoriaOpt.get());
 
         CategoriaServicios guardado = categoriaServiciosRepository.save(cs);
         return new ResponseEntity<>(guardado, HttpStatus.CREATED);
     }
 
-    // PUT: actualizar relación (cambiar servicio y/o categoría)
-    @PutMapping("/{id}")
-    public ResponseEntity<CategoriaServicios> actualizarRelacion(
-            @PathVariable Integer id,
+    // DELETE: eliminar relación
+    @DeleteMapping
+    public ResponseEntity<Void> eliminarRelacion(
             @RequestParam Integer idServicio,
             @RequestParam Integer idCategoria) {
 
-        Optional<CategoriaServicios> csOpt = categoriaServiciosRepository.findById(id);
-        if (csOpt.isEmpty()) {
+        CategoriaServiciosID clave = new CategoriaServiciosID(idServicio, idCategoria);
+
+        if (!categoriaServiciosRepository.existsById(clave)) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
-        Optional<Servicio> servicioOpt = servicioRepository.findById(idServicio);
-        Optional<Categoria> categoriaOpt = categoriaRepository.findById(idCategoria);
-
-        if (servicioOpt.isEmpty() || categoriaOpt.isEmpty()) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
-
-        CategoriaServicios cs = csOpt.get();
-        // OJO: aquí NO tocamos el id, solo actualizamos las referencias
-        cs.setServicio(servicioOpt.get());
-        cs.setCategoria(categoriaOpt.get());
-
-        CategoriaServicios actualizado = categoriaServiciosRepository.save(cs);
-        return new ResponseEntity<>(actualizado, HttpStatus.OK);
-    }
-
-    // DELETE: eliminar relación
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarRelacion(@PathVariable Integer id) {
-        if (!categoriaServiciosRepository.existsById(id)) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        categoriaServiciosRepository.deleteById(id);
+        categoriaServiciosRepository.deleteById(clave);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

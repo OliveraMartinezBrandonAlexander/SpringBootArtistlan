@@ -1,10 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ServicioDTO;
-import com.example.demo.model.Categoria;
-import com.example.demo.model.CategoriaServicios;
-import com.example.demo.model.Servicio;
-import com.example.demo.model.Usuario;
+import com.example.demo.model.*;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.repository.ServicioRepository;
@@ -38,7 +35,7 @@ public class ServicioServiceImpl implements ServicioService {
 
     @Override
     public List<Servicio> todosServicios() {
-        return repo.findAll();
+        return repo.findAllConCategoria();
     }
 
     @Override
@@ -67,12 +64,14 @@ public class ServicioServiceImpl implements ServicioService {
         return false;
     }
 
-    /**
-     * Crea un servicio para un usuario y registra la relación en categoria_servicios.
-     */
+    @Override
+    public List<Servicio> buscarPorUsuarioId(Integer usuarioId) {
+        return repo.findByUsuarioIdUsuario(usuarioId);
+    }
+
+
     @Override
     public Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto) {
-
         Usuario usuario = usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
@@ -83,10 +82,8 @@ public class ServicioServiceImpl implements ServicioService {
         servicio.setTecnicas(dto.getTecnicas());
         servicio.setUsuario(usuario);
 
-        // Primero guardamos el servicio
         Servicio guardado = repo.save(servicio);
 
-        // Luego creamos el registro en categoria_servicios si viene idCategoria
         if (dto.getIdCategoria() != null) {
             Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
                     .orElseThrow(() -> new RuntimeException("Categoría no encontrada"));
@@ -95,7 +92,12 @@ public class ServicioServiceImpl implements ServicioService {
             cs.setServicio(guardado);
             cs.setCategoria(categoria);
 
+            CategoriaServiciosID id = new CategoriaServiciosID(guardado.getIdServicio(), categoria.getIdCategoria());
+            cs.setId(id);
+
             categoriaServiciosRepository.save(cs);
+
+            guardado.getCategoriasServicios().add(cs);
         }
 
         return guardado;

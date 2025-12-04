@@ -18,9 +18,7 @@ public interface ServicioService {
 
     boolean eliminarServicio(Integer id);
 
-    /**
-     * Nuevo:
-     * Crea un servicio para un usuario y registra la relación en categoria_servicios.
-     */
+    List<Servicio> buscarPorUsuarioId(Integer usuarioId);
+
     Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto);
 }
