@@ -2,20 +2,22 @@ package com.example.demo.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "USUARIO")
+@Table(name = "Usuario")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@EqualsAndHashCode(callSuper = false, exclude = {"categoriasUsuarios"})
 public class Usuario {
 
     @Id
@@ -51,7 +53,10 @@ public class Usuario {
     @Column(name = "FECHA_NACIMIENTO")
     private LocalDate fechaNacimiento;
 
-
     @Column(name = "ADMIN_USUARIO")
     private int adminUsuario;
+
+    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private Set<CategoriaUsuarios> categoriasUsuarios = new HashSet<>();
 }

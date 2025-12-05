@@ -23,4 +23,7 @@ public class UsuarioDTO {
     private String redesSociales;
     private LocalDate fechaNacimiento;
     private Integer adminUsuario;
+
+    private Integer idCategoria;
+    private String categoria;
 }

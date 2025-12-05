@@ -27,4 +27,5 @@ public class ObraDTO {
 
     private String nombreAutor;
     private String nombreCategoria;
+    private String fotoPerfilAutor;
 }

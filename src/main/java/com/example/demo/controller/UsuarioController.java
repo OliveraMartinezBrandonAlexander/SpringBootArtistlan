@@ -1,8 +1,15 @@
 package com.example.demo.controller;
+
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
-import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.dto.UsuarioDTO;
+import com.example.demo.dto.UsuarioIdCategoriaDTO;
+import com.example.demo.model.Categoria;
+import com.example.demo.model.CategoriaUsuarios;
+import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
+import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.UsuarioIdCategoriaService;
 import com.example.demo.service.UsuarioService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,9 +23,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -29,19 +34,18 @@ public class UsuarioController {
 
     private final UsuarioService usuarioService;
     private final UsuarioRepository usuarioRepository;
-
+    private final CategoriaRepository categoriaRepository;
+    private final UsuarioIdCategoriaService usuarioIdCategoriaService;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    // GET todos
+    // ---------------- GET TODOS USUARIOS ----------------
     @GetMapping
     public ResponseEntity<List<UsuarioDTO>> obtenerTodos() {
         List<Usuario> usuarios = usuarioService.todosUsuarios();
-        if (usuarios.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
+        if (usuarios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<UsuarioDTO> dtos = usuarios.stream()
                 .map(this::convertirADTO)
@@ -50,7 +54,29 @@ public class UsuarioController {
         return ResponseEntity.ok(dtos);
     }
 
-    // POST (recibe DTO, mapea a entidad y guarda)
+    // ---------------- GET USUARIO POR ID ----------------
+    @GetMapping("/{id}")
+    public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id) {
+        return usuarioRepository.findByIdConCategorias(id)
+                .map(this::convertirADTO)
+
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // ---------------- GET CATEGORIA DEL USUARIO ----------------
+    @GetMapping("/{id}/categoria")
+    public ResponseEntity<UsuarioDTO> obtenerCategoriaUsuario(@PathVariable Integer id) {
+        return usuarioRepository.findByIdConCategorias(id)
+                .map(u -> {
+                    UsuarioDTO dto = convertirADTO(u);
+                    dto.setContrasena(null);
+                    return ResponseEntity.ok(dto);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // ---------------- POST CREAR USUARIOS ----------------
     @PostMapping
     public ResponseEntity<List<UsuarioDTO>> crearUsuarios(HttpServletRequest request) throws IOException {
         String body = request.getReader().lines().collect(Collectors.joining());
@@ -64,8 +90,7 @@ public class UsuarioController {
         }
 
         List<UsuarioDTO> creados = usuarios.stream()
-                .map(this::convertirAEntidad)
-                .map(usuarioService::guardarUsuario)
+                .map(usuarioService::crearUsuarioConCategoria)
                 .map(this::convertirADTO)
                 .peek(dto -> dto.setContrasena(null))
                 .collect(Collectors.toList());
@@ -73,89 +98,93 @@ public class UsuarioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(creados);
     }
 
-    // PUT todos (recibe lista de DTOs, mapea, guarda y devuelve DTOs)
-    @PutMapping
-    public ResponseEntity<List<UsuarioDTO>> actualizarTodos(HttpServletRequest request) throws IOException {
-        String body = request.getReader().lines().collect(Collectors.joining());
-        List<UsuarioDTO> usuarios;
-        if (body.trim().startsWith("[")) {
-            usuarios = mapper.readValue(body, new TypeReference<List<UsuarioDTO>>() {});
-        } else {
-            UsuarioDTO u = mapper.readValue(body, UsuarioDTO.class);
-            usuarios = Collections.singletonList(u);
+    // ---------------- PUT EDITAR USUARIO ----------------
+    @PutMapping("/{id}")
+    public ResponseEntity<UsuarioDTO> editarUsuario(@PathVariable Integer id, @RequestBody UsuarioDTO dto) {
+        try {
+            Usuario actualizado = usuarioService.actualizarUsuarioConCategoria(id, dto);
+            return ResponseEntity.ok(convertirADTO(actualizado));
+
+        } catch (java.util.NoSuchElementException e) {
+            System.err.println("ERROR: Usuario o Categoría no encontrada: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.notFound().build();
+
+        } catch (Exception e) {
+
+            System.err.println("ERROR CRÍTICO AL ACTUALIZAR USUARIO:");
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        List<UsuarioDTO> actualizados = usuarios.stream()
-                .map(this::convertirAEntidad)
-                .map(usuarioService::guardarUsuario)
-                .map(this::convertirADTO)
-                .peek(dto -> dto.setContrasena(null))
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(actualizados);
     }
 
-    // DELETE todos
+    // ---------------- DELETE TODOS USUARIOS ----------------
     @DeleteMapping
     public ResponseEntity<Void> eliminarTodos() {
         usuarioService.todosUsuarios().forEach(u -> usuarioService.eliminarUsuario(u.getIdUsuario()));
         return ResponseEntity.noContent().build();
     }
-    @GetMapping("/login")
-    public ResponseEntity<?> login(
-            @RequestParam String usuario, // Puede ser ""
-            @RequestParam String correo, // Puede ser ""
-            @RequestParam String contrasena
-    ) {
-        Optional<Usuario> user;
 
-        if (!usuario.isEmpty()) {
-            // Priorizar búsqueda por Usuario si está presente
+    // ---------------- LOGIN ----------------
+    @GetMapping("/login")
+    public ResponseEntity<?> login(@RequestParam(required = false) String usuario,
+                                   @RequestParam(required = false) String correo,
+                                   @RequestParam String contrasena) {
+
+        Optional<Usuario> user = Optional.empty();
+
+        if (usuario != null && !usuario.isEmpty()) {
             user = usuarioRepository.findByUsuarioAndContrasena(usuario, contrasena);
-        } else if (!correo.isEmpty()) {
-            // Si Usuario está vacío, buscar por Correo
+        } else if (correo != null && !correo.isEmpty()) {
             user = usuarioRepository.findByCorreoAndContrasena(correo, contrasena);
         } else {
-            // Ni usuario ni correo se proporcionaron
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Falta un identificador");
+            return ResponseEntity.badRequest().body("Falta usuario o correo");
         }
 
-        if (user.isPresent()) {
-            return ResponseEntity.ok(user.get());
-        } else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("Credenciales incorrectas");
+        if (user.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
         }
+
+        UsuarioDTO dto = convertirADTO(user.get());
+        dto.setContrasena(null);
+        return ResponseEntity.ok(dto);
     }
+
+    // ---------------- VERIFICAR EXISTENCIA ----------------
     @GetMapping("/existe")
-    public ResponseEntity<String> existeUsuario(
-            @RequestParam String usuario,
-            @RequestParam String correo
-    ) {
+    public ResponseEntity<String> existeUsuario(@RequestParam String usuario,
+                                                @RequestParam String correo) {
 
         boolean usuarioExiste = usuarioRepository.existsByUsuario(usuario);
         boolean correoExiste = usuarioRepository.existsByCorreo(correo);
 
-        if (usuarioExiste && correoExiste) {
-            // Ambos campos ya están en la base de datos
-            return ResponseEntity.ok("AMBOS_DUPLICADOS");
-        } else if (usuarioExiste) {
-            // Solo el nombre de usuario está duplicado
-            return ResponseEntity.ok("USUARIO_DUPLICADO");
-        } else if (correoExiste) {
-            // Solo el correo electrónico está duplicado
-            return ResponseEntity.ok("CORREO_DUPLICADO");
-        } else {
-            // Ninguno está duplicado
-            return ResponseEntity.ok("OK");
-        }
+        if (usuarioExiste && correoExiste) return ResponseEntity.ok("AMBOS_DUPLICADOS");
+        if (usuarioExiste) return ResponseEntity.ok("USUARIO_DUPLICADO");
+        if (correoExiste) return ResponseEntity.ok("CORREO_DUPLICADO");
+        return ResponseEntity.ok("OK");
     }
 
-    // Conversión entidad -> DTO
+    // ---------------- ACTUALIZAR FOTO DE PERFIL ----------------
+    @PutMapping("/{id}/foto-perfil")
+    public ResponseEntity<UsuarioDTO> actualizarFotoPerfil(@PathVariable int id,
+                                                           @RequestBody ActualizarFotoPerfilRequestDTO body) {
+        Optional<Usuario> op = usuarioRepository.findById(id);
+        if (op.isEmpty()) return ResponseEntity.notFound().build();
+
+        Usuario usuario = op.get();
+        usuario.setFotoPerfil(body.getFotoPerfil());
+
+        Usuario actualizado = usuarioRepository.save(usuario);
+        return ResponseEntity.ok(convertirADTO(actualizado));
+    }
+
+    // ---------------- CONVERSIONES ----------------
     private UsuarioDTO convertirADTO(Usuario u) {
-        return UsuarioDTO.builder()
+        UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
                 .usuario(u.getUsuario())
-                .contrasena(null)
+                .contrasena(u.getContrasena())
                 .correo(u.getCorreo())
                 .descripcion(u.getDescripcion())
                 .fotoPerfil(u.getFotoPerfil())
@@ -163,16 +192,26 @@ public class UsuarioController {
                 .redesSociales(u.getRedesSociales())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .adminUsuario(u.getAdminUsuario())
-                .build();
+                .idCategoria(null)
+                .categoria(null);
+
+        // Obtener categorías usando el service que ya sabe consultarlas
+        List<UsuarioIdCategoriaDTO> categorias = usuarioIdCategoriaService.obtenerTodasCategoriasPorUsuario(u.getIdUsuario());
+        if (!categorias.isEmpty()) {
+            UsuarioIdCategoriaDTO cat = categorias.get(0); // solo la primera
+            builder.idCategoria(cat.getIdCategoria());
+            builder.categoria(cat.getNombreCategoria());
+        }
+
+        return builder.build();
     }
 
-    // Conversión DTO -> entidad
-    private Usuario convertirAEntidad(UsuarioDTO dto) {
-        Usuario u = new Usuario();
+    private Usuario convertirAEntidad(UsuarioDTO dto, Usuario usuarioExistente) {
+        Usuario u = usuarioExistente != null ? usuarioExistente : new Usuario();
+
         u.setIdUsuario(dto.getIdUsuario());
         u.setNombreCompleto(dto.getNombreCompleto());
         u.setUsuario(dto.getUsuario());
-        u.setContrasena(dto.getContrasena());
         u.setCorreo(dto.getCorreo());
         u.setDescripcion(dto.getDescripcion());
         u.setFotoPerfil(dto.getFotoPerfil());
@@ -180,6 +219,12 @@ public class UsuarioController {
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
         u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
+
+        // Solo actualiza la contraseña si viene en el DTO
+        if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
+            u.setContrasena(dto.getContrasena());
+        }
+
         return u;
     }
 }

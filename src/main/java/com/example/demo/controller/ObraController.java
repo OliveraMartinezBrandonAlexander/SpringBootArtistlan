@@ -9,7 +9,9 @@ import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -56,32 +58,44 @@ public class ObraController {
     }
 
     // DELETE por id
-    @DeleteMapping( "/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
         boolean eliminado = service.eliminar(id);
         return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
+    // PUT para actualizar imagen1
     @PutMapping("/{id}/imagen1")
     public ResponseEntity<Obra> actualizarImagen1(
             @PathVariable Integer id,
             @RequestBody ActualizarImagenObraRequestDTO requestDTO
-            ) {
+    ) {
         return service.actualizarImagen1(id, requestDTO.getImagen1())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Conversión a DTO
+    // Conversión segura a DTO
     private ObraDTO convertirADTO(Obra o) {
-        Integer idUsuario = (o.getUsuario() != null) ? o.getUsuario().getIdUsuario() : null;
-        String nombreAutor = (o.getUsuario() != null) ? o.getUsuario().getUsuario() : "Desconocido";
+        Integer idUsuario = Optional.ofNullable(o.getUsuario())
+                .map(u -> u.getIdUsuario())
+                .orElse(null);
 
+        String nombreAutor = Optional.ofNullable(o.getUsuario())
+                .map(u -> u.getUsuario())
+                .orElse("Desconocido");
+
+        String fotoPerfilAutor = Optional.ofNullable(o.getUsuario())
+                .map(u -> u.getFotoPerfil())
+                .orElse(null);
+
+        // Categoría: copiamos el Set a una lista para evitar ConcurrentModification
         Integer idCategoria = null;
         String nombreCategoria = "Sin Categoría";
 
         if (o.getCategoriaObras() != null && !o.getCategoriaObras().isEmpty()) {
-            CategoriaObras co = o.getCategoriaObras().iterator().next();
+            List<CategoriaObras> listaCategorias = new ArrayList<>(o.getCategoriaObras());
+            CategoriaObras co = listaCategorias.get(0); // tomamos la primera
             if (co.getCategoria() != null) {
                 idCategoria = co.getCategoria().getIdCategoria();
                 nombreCategoria = co.getCategoria().getNombreCategoria();
@@ -104,6 +118,7 @@ public class ObraController {
                 .idCategoria(idCategoria)
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)
+                .fotoPerfilAutor(fotoPerfilAutor)
                 .build();
     }
 }

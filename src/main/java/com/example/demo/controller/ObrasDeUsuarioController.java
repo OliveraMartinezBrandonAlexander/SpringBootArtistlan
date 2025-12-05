@@ -117,6 +117,7 @@ public class ObrasDeUsuarioController {
 
         String nombreAutor = (o.getUsuario() != null) ? o.getUsuario().getUsuario() : "Desconocido";
 
+        String fotoPerfilAutor = (o.getUsuario() != null) ? o.getUsuario().getFotoPerfil() : null;
 
         Integer idCategoria = null;
         String nombreCategoria = "Sin Categoría";
@@ -147,6 +148,7 @@ public class ObrasDeUsuarioController {
                 .idCategoria(idCategoria)
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)
+                .fotoPerfilAutor(fotoPerfilAutor)
                 .build();
     }
 }

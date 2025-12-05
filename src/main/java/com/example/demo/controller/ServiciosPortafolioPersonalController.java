@@ -84,6 +84,7 @@ public class ServiciosPortafolioPersonalController {
         Integer idCategoria = null;
         String nombreCategoria = null;
 
+
         if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
             CategoriaServicios cs = s.getCategoriasServicios().iterator().next();
             if (cs.getCategoria() != null) {
@@ -103,6 +104,9 @@ public class ServiciosPortafolioPersonalController {
                 )
                 .nombreUsuario(
                         s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido"
+                )
+                .fotoPerfilAutor(
+                        s.getUsuario() != null ? s.getUsuario().getFotoPerfil() : null
                 )
                 .idCategoria(idCategoria)
                 .categoria(nombreCategoria)

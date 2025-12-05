@@ -71,7 +71,8 @@ public class ServicioController {
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
                 .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)
-                .nombreUsuario(s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido");
+                .nombreUsuario(s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido")
+                .fotoPerfilAutor(s.getUsuario() != null ? s.getUsuario().getFotoPerfil() : null);
 
         if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
             s.getCategoriasServicios().size();

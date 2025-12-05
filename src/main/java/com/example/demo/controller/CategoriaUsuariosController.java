@@ -6,6 +6,9 @@ import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
+import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.CategoriaUsuariosRepository;
+import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.CategoriaUsuariosService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,31 +22,35 @@ public class CategoriaUsuariosController {
 
     @Autowired
     private CategoriaUsuariosService service;
+    @Autowired
+    private UsuarioRepository repo;
+    @Autowired
+    private CategoriaRepository categoriaRepository;@Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private CategoriaUsuariosRepository categoriaUsuariosRepository;
 
     @PostMapping
     public ResponseEntity<CategoriaUsuarios> crear(@RequestBody CategoriaUsuariosDto dto) {
+        CategoriaUsuariosID id = new CategoriaUsuariosID(dto.getIdUsuario(), dto.getIdCategoria());
 
-        // ID compuesto
-        CategoriaUsuariosID id = new CategoriaUsuariosID(
-                dto.getIdUsuario(),
-                dto.getIdCategoria()
-        );
+        if(categoriaUsuariosRepository.existsById(id)) {
+            return ResponseEntity.status(409).build(); // Conflict
+        }
 
-        // Referencias a Usuario y Categoria (solo ID)
-        Usuario u = new Usuario();
-        u.setIdUsuario(dto.getIdUsuario());
+        Usuario usuario = usuarioRepository.findById(dto.getIdUsuario())
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        Categoria c = new Categoria();
-        c.setIdCategoria(dto.getIdCategoria());
+        Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
+                .orElseThrow(() -> new RuntimeException("Categoría no encontrada"));
 
-        // Construimos la entidad
         CategoriaUsuarios cu = new CategoriaUsuarios();
         cu.setId(id);
-        cu.setUsuario(u);
-        cu.setCategoria(c);
+        cu.setUsuario(usuario);
+        cu.setCategoria(categoria);
 
-        CategoriaUsuarios guardado = service.guardar(cu);
-        return ResponseEntity.ok(guardado);
+        return ResponseEntity.ok(service.guardar(cu));
     }
 
     @GetMapping

@@ -24,6 +24,7 @@ public class ServicioDTO {
 
     private Integer idCategoria;
     private String categoria;
+    private String fotoPerfilAutor;
 
     public ServicioDTO(Servicio s) {
         this.idServicio = s.getIdServicio();
@@ -34,6 +35,7 @@ public class ServicioDTO {
 
         this.idUsuario = s.getUsuario().getIdUsuario();
         this.nombreUsuario = s.getUsuario().getUsuario();
+        this.fotoPerfilAutor= s.getUsuario().getFotoPerfil();
 
         if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
 
