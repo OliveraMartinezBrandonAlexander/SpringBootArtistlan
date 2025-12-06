@@ -78,7 +78,6 @@ public class ServiciosPortafolioPersonalController {
                 : new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
-    // ========= Conversión a DTO =========
     private ServicioDTO convertirADTO(Servicio s) {
 
         Integer idCategoria = null;
@@ -92,7 +91,6 @@ public class ServiciosPortafolioPersonalController {
                 nombreCategoria = cs.getCategoria().getNombreCategoria();
             }
         }
-
         return ServicioDTO.builder()
                 .idServicio(s.getIdServicio())
                 .titulo(s.getTitulo())

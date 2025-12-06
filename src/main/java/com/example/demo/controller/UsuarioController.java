@@ -41,7 +41,6 @@ public class UsuarioController {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    // ---------------- GET TODOS USUARIOS ----------------
     @GetMapping
     public ResponseEntity<List<UsuarioDTO>> obtenerTodos() {
         List<Usuario> usuarios = usuarioService.todosUsuarios();
@@ -54,7 +53,6 @@ public class UsuarioController {
         return ResponseEntity.ok(dtos);
     }
 
-    // ---------------- GET USUARIO POR ID ----------------
     @GetMapping("/{id}")
     public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id) {
         return usuarioRepository.findByIdConCategorias(id)
@@ -64,7 +62,6 @@ public class UsuarioController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ---------------- GET CATEGORIA DEL USUARIO ----------------
     @GetMapping("/{id}/categoria")
     public ResponseEntity<UsuarioDTO> obtenerCategoriaUsuario(@PathVariable Integer id) {
         return usuarioRepository.findByIdConCategorias(id)
@@ -76,7 +73,6 @@ public class UsuarioController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ---------------- POST CREAR USUARIOS ----------------
     @PostMapping
     public ResponseEntity<List<UsuarioDTO>> crearUsuarios(HttpServletRequest request) throws IOException {
         String body = request.getReader().lines().collect(Collectors.joining());
@@ -98,7 +94,6 @@ public class UsuarioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(creados);
     }
 
-    // ---------------- PUT EDITAR USUARIO ----------------
     @PutMapping("/{id}")
     public ResponseEntity<UsuarioDTO> editarUsuario(@PathVariable Integer id, @RequestBody UsuarioDTO dto) {
         try {
@@ -118,14 +113,12 @@ public class UsuarioController {
         }
     }
 
-    // ---------------- DELETE TODOS USUARIOS ----------------
     @DeleteMapping
     public ResponseEntity<Void> eliminarTodos() {
         usuarioService.todosUsuarios().forEach(u -> usuarioService.eliminarUsuario(u.getIdUsuario()));
         return ResponseEntity.noContent().build();
     }
 
-    // ---------------- LOGIN ----------------
     @GetMapping("/login")
     public ResponseEntity<?> login(@RequestParam(required = false) String usuario,
                                    @RequestParam(required = false) String correo,
@@ -150,7 +143,6 @@ public class UsuarioController {
         return ResponseEntity.ok(dto);
     }
 
-    // ---------------- VERIFICAR EXISTENCIA ----------------
     @GetMapping("/existe")
     public ResponseEntity<String> existeUsuario(@RequestParam String usuario,
                                                 @RequestParam String correo) {
@@ -163,8 +155,6 @@ public class UsuarioController {
         if (correoExiste) return ResponseEntity.ok("CORREO_DUPLICADO");
         return ResponseEntity.ok("OK");
     }
-
-    // ---------------- ACTUALIZAR FOTO DE PERFIL ----------------
     @PutMapping("/{id}/foto-perfil")
     public ResponseEntity<UsuarioDTO> actualizarFotoPerfil(@PathVariable int id,
                                                            @RequestBody ActualizarFotoPerfilRequestDTO body) {
@@ -177,8 +167,6 @@ public class UsuarioController {
         Usuario actualizado = usuarioRepository.save(usuario);
         return ResponseEntity.ok(convertirADTO(actualizado));
     }
-
-    // ---------------- CONVERSIONES ----------------
     private UsuarioDTO convertirADTO(Usuario u) {
         UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()
                 .idUsuario(u.getIdUsuario())
@@ -195,7 +183,6 @@ public class UsuarioController {
                 .idCategoria(null)
                 .categoria(null);
 
-        // Obtener categorías usando el service que ya sabe consultarlas
         List<UsuarioIdCategoriaDTO> categorias = usuarioIdCategoriaService.obtenerTodasCategoriasPorUsuario(u.getIdUsuario());
         if (!categorias.isEmpty()) {
             UsuarioIdCategoriaDTO cat = categorias.get(0); // solo la primera
@@ -205,10 +192,8 @@ public class UsuarioController {
 
         return builder.build();
     }
-
     private Usuario convertirAEntidad(UsuarioDTO dto, Usuario usuarioExistente) {
         Usuario u = usuarioExistente != null ? usuarioExistente : new Usuario();
-
         u.setIdUsuario(dto.getIdUsuario());
         u.setNombreCompleto(dto.getNombreCompleto());
         u.setUsuario(dto.getUsuario());
@@ -219,8 +204,6 @@ public class UsuarioController {
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
         u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
-
-        // Solo actualiza la contraseña si viene en el DTO
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());
         }

@@ -28,13 +28,9 @@ public class UsuarioIdCategoriaController {
         }
 
         List<Map<String, Object>> resultado = new ArrayList<>();
-
-        // Primer objeto: el usuario
         Map<String, Object> usuarioMap = new HashMap<>();
         usuarioMap.put("idUsuario", usuarioId);
         resultado.add(usuarioMap);
-
-        // Agregar las categorías
         for (UsuarioIdCategoriaDTO cat : categorias) {
             Map<String, Object> catMap = new HashMap<>();
             catMap.put("idCategoria", cat.getIdCategoria());
@@ -45,13 +41,11 @@ public class UsuarioIdCategoriaController {
         return resultado;
     }
 
-    // GET: Listar todas las relaciones usuario-categoría
     @GetMapping
     public List<CategoriaUsuarios> listar() {
         return service.listar();
     }
 
-    // POST: Crear una relación usuario-categoría (Publicar)
     @PostMapping
     public ResponseEntity<CategoriaUsuarios> guardar(@RequestBody CategoriaUsuarios cu) {
         CategoriaUsuarios creado = service.guardar(cu);

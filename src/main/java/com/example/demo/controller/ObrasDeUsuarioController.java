@@ -41,7 +41,6 @@ public class ObrasDeUsuarioController {
         return ResponseEntity.ok(dtos);
     }
 
-    // --- 2. POST - Crear una nueva obra para un usuario específico
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ObraDTO> crearObraParaUsuario(
             @PathVariable Integer usuarioId,
@@ -123,7 +122,6 @@ public class ObrasDeUsuarioController {
         String nombreCategoria = "Sin Categoría";
 
         if (o.getCategoriaObras() != null && !o.getCategoriaObras().isEmpty()) {
-            // Asumiendo que solo manejas una categoría principal para el DTO.
             CategoriaObras co = o.getCategoriaObras().iterator().next();
             if (co.getCategoria() != null) {
                 idCategoria = co.getCategoria().getIdCategoria();

@@ -26,14 +26,11 @@ public class UsuarioFavoritosController {
     private final ObraService obraService;
     private final ServicioService servicioService;
 
-    // GET - Obtener todos los favoritos de un usuario específico
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<FavoritosDTO>> obtenerFavoritosPorUsuario(@PathVariable Integer usuarioId) {
-        // Verificar si el usuario existe
         Usuario usuario = usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Obtener todos los favoritos y filtrar por usuario
         List<Favoritos> favoritos = favoritosService.listar().stream()
                 .filter(f -> f.getUsuario().getIdUsuario().equals(usuarioId))
                 .collect(Collectors.toList());
@@ -49,23 +46,19 @@ public class UsuarioFavoritosController {
         return ResponseEntity.ok(dtos);
     }
 
-    // POST - Crear un nuevo favorito para un usuario
     @PostMapping("/{usuarioId}")
     public ResponseEntity<FavoritosDTO> crearFavorito(
             @PathVariable Integer usuarioId,
             @RequestBody FavoritosDTO dto) {
 
-        // Validar que el usuarioId del path coincide con el del DTO
         if (!usuarioId.equals(dto.getId_usuario())) {
             return ResponseEntity.badRequest().build();
         }
 
-        // Validar que al menos uno de los IDs (obra o servicio) está presente
         if (dto.getId_obra() == null && dto.getId_servicio() == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        // Verificar que el usuario existe
         Usuario usuario = usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
@@ -90,14 +83,12 @@ public class UsuarioFavoritosController {
         return ResponseEntity.ok(toDto(guardado));
     }
 
-    // PUT - Actualizar un favorito existente de un usuario
     @PutMapping("/{usuarioId}/{favoritoId}")
     public ResponseEntity<FavoritosDTO> actualizarFavorito(
             @PathVariable Integer usuarioId,
             @PathVariable Integer favoritoId,
             @RequestBody FavoritosDTO dto) {
 
-        // Verificar que el favorito existe y pertenece al usuario
         Favoritos favoritoExistente = favoritosService.buscarPorId(favoritoId)
                 .orElseThrow(() -> new RuntimeException("Favorito no encontrado"));
 
@@ -105,12 +96,10 @@ public class UsuarioFavoritosController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Validar que al menos uno de los IDs (obra o servicio) está presente
         if (dto.getId_obra() == null && dto.getId_servicio() == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        // Actualizar obra si se proporciona
         if (dto.getId_obra() != null) {
             Obra obra = obraService.buscarPorId(dto.getId_obra())
                     .orElseThrow(() -> new RuntimeException("Obra no encontrada"));
@@ -119,7 +108,6 @@ public class UsuarioFavoritosController {
             favoritoExistente.setObra(null);
         }
 
-        // Actualizar servicio si se proporciona
         if (dto.getId_servicio() != null) {
             Servicio servicio = servicioService.buscarPorId(dto.getId_servicio())
                     .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
@@ -132,13 +120,11 @@ public class UsuarioFavoritosController {
         return ResponseEntity.ok(toDto(actualizado));
     }
 
-    // DELETE - Eliminar un favorito específico de un usuario
     @DeleteMapping("/{usuarioId}/{favoritoId}")
     public ResponseEntity<Void> eliminarFavorito(
             @PathVariable Integer usuarioId,
             @PathVariable Integer favoritoId) {
 
-        // Verificar que el favorito existe y pertenece al usuario
         Favoritos favorito = favoritosService.buscarPorId(favoritoId)
                 .orElseThrow(() -> new RuntimeException("Favorito no encontrado"));
 
@@ -150,14 +136,12 @@ public class UsuarioFavoritosController {
         return ResponseEntity.noContent().build();
     }
 
-    // DELETE - Eliminar todos los favoritos de un usuario
     @DeleteMapping("/{usuarioId}")
     public ResponseEntity<Void> eliminarTodosFavoritos(@PathVariable Integer usuarioId) {
-        // Verificar que el usuario existe
+
         Usuario usuario = usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Obtener y eliminar todos los favoritos del usuario
         List<Favoritos> favoritos = favoritosService.listar().stream()
                 .filter(f -> f.getUsuario().getIdUsuario().equals(usuarioId))
                 .collect(Collectors.toList());
@@ -167,7 +151,6 @@ public class UsuarioFavoritosController {
         return ResponseEntity.noContent().build();
     }
 
-    // Método auxiliar para convertir entidad a DTO
     private FavoritosDTO toDto(Favoritos f) {
         return FavoritosDTO.builder()
                 .id_favorito(f.getId_favorito())
