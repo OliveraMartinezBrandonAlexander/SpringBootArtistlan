@@ -56,7 +56,7 @@ public class Usuario {
     @Column(name = "ADMIN_USUARIO")
     private int adminUsuario;
 
-    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL)
     @JsonManagedReference
     private Set<CategoriaUsuarios> categoriasUsuarios = new HashSet<>();
 }

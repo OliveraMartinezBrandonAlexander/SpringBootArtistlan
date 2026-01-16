@@ -5,9 +5,7 @@ import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
-import com.example.demo.repository.CategoriaRepository;
-import com.example.demo.repository.CategoriaUsuariosRepository;
-import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.repository.*;
 import com.example.demo.service.UsuarioService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +26,14 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Autowired
     private CategoriaUsuariosRepository categoriaUsuariosRepository;
+
+    // si los tienes:
+    @Autowired
+    private ObraRepository obraRepository;
+
+    @Autowired
+    private ServicioRepository servicioRepository;
+
 
     // Guardar usuario simple
     @Override
@@ -90,14 +96,25 @@ public class UsuarioServiceImpl implements UsuarioService {
         });
     }
 
+    @Transactional
     @Override
     public boolean eliminarUsuario(Integer id) {
-        if (repo.existsById(id)) {
-            repo.deleteById(id);
-            return true;
+
+        if (!repo.existsById(id)) {
+            return false;
         }
-        return false;
+
+        categoriaUsuariosRepository.deleteByUsuarioId(id);
+        obraRepository.deleteByUsuarioId(id);
+        servicioRepository.deleteByUsuarioId(id);
+
+        repo.deleteById(id);
+
+        return true;
     }
+
+
+
 
     @Override
     public Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto) {

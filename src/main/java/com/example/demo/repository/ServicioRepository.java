@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import com.example.demo.model.Servicio;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,4 +24,8 @@ public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
     LEFT JOIN FETCH cs.categoria
     """)
     List<Servicio> findAllConCategoria();
+
+    @Modifying
+    @Query("DELETE FROM Servicio s WHERE s.usuario.idUsuario = :id")
+    void deleteByUsuarioId(@Param("id") Integer id);
 }
