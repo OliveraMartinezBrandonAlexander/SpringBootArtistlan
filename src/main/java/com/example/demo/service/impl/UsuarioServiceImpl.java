@@ -11,6 +11,8 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -131,11 +133,16 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         usuario = convertirAEntidad(dto, usuario);
 
+        if (usuario.getCategoriasUsuarios() == null) {
+            usuario.setCategoriasUsuarios(new HashSet<>());
+        }
+        usuario.getCategoriasUsuarios().clear();
+        categoriaUsuariosRepository.deleteByUsuarioId(id);
+
+
         if (dto.getIdCategoria() != null) {
             Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
                     .orElseThrow(() -> new java.util.NoSuchElementException("Categoría no encontrada con ID: " + dto.getIdCategoria()));
-
-            usuario.getCategoriasUsuarios().clear();
 
             CategoriaUsuarios cu = new CategoriaUsuarios();
             CategoriaUsuariosID cuId = new CategoriaUsuariosID(usuario.getIdUsuario(), categoria.getIdCategoria());
@@ -144,10 +151,9 @@ public class UsuarioServiceImpl implements UsuarioService {
             cu.setUsuario(usuario);
             cu.setCategoria(categoria);
 
+            categoriaUsuariosRepository.save(cu);
+
             usuario.getCategoriasUsuarios().add(cu);
-
-
-
         }
         return repo.save(usuario);
     }
