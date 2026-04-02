@@ -21,6 +21,7 @@ public class ObraDTO {
     private String tecnicas;
     private String medidas;
     private Integer likes;
+    private Boolean esFavorito;
 
     private Integer idUsuario;
     private Integer idCategoria;

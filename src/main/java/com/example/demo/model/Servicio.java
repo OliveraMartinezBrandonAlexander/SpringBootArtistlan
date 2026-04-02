@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Table(name = "servicio")
+@Table(name = "Servicio")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -20,13 +20,13 @@ public class Servicio {
     @Column(name = "id_servicio")
     private Integer idServicio;
 
-    @Column(name = "titulo", length = 255)
+    @Column(name = "titulo", nullable = false, length = 100)
     private String titulo;
 
-    @Column(name = "descripcion", length = 255)
+    @Column(name = "descripcion", nullable = false, columnDefinition = "TEXT")
     private String descripcion;
 
-    @Column(name = "contacto", length = 255)
+    @Column(name = "contacto", nullable = false, length = 100)
     private String contacto;
 
     @Column(name = "tecnicas", length = 255)

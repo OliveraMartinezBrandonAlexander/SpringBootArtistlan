@@ -8,15 +8,11 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-// tiene acceso a la base de datos usando JPA
-
 public interface UsuarioRepository extends JpaRepository<Usuario, Integer> {
 
-    // Traer todos los usuarios que sean admins (adminUsuario = 1)
-    @Query("SELECT u FROM Usuario u WHERE u.adminUsuario = 1")
+    @Query("SELECT u FROM Usuario u WHERE UPPER(u.rol) = 'ADMIN'")
     List<Usuario> findAdmins();
 
-    //Login
     boolean existsByUsuario(String usuario);
     boolean existsByCorreo(String correo);
 

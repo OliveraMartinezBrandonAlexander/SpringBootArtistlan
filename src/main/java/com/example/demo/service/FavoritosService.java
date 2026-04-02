@@ -1,17 +1,27 @@
 package com.example.demo.service;
 
 import com.example.demo.model.Favoritos;
+import com.example.demo.dto.FavoritosDTO;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface FavoritosService {
 
-    Favoritos guardar(Favoritos f);
+    Favoritos agregarFavorito(FavoritosDTO dto);
 
-    List<Favoritos> listar();
+    void eliminarFavorito(FavoritosDTO dto);
 
-    Optional<Favoritos> buscarPorId(Integer id);
+    List<Favoritos> obtenerFavoritosPorUsuario(Long idUsuario);
 
-    void eliminar(Integer id);
+    int likesPorObra(Long idObra);
+
+    int likesPorServicio(Long idServicio);
+
+    int likesPorArtista(Long idArtista);
+
+    boolean esObraFavorita(Integer idUsuario, Integer idObra);
+
+    boolean esServicioFavorito(Integer idUsuario, Integer idServicio);
+
+    boolean esArtistaFavorito(Integer idUsuario, Integer idArtista);
 }

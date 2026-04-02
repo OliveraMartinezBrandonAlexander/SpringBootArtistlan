@@ -3,7 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
-import com.example.demo.model.Usuario;
+import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.UsuarioService;
 import lombok.AllArgsConstructor;
@@ -21,9 +21,12 @@ public class ObrasDeUsuarioController {
 
     private final ObraService obraService;
     private final UsuarioService usuarioService;
+    private final FavoritosService favoritosService;
 
     @GetMapping("/{usuarioId}")
-    public ResponseEntity<List<ObraDTO>> obtenerObrasPorUsuario(@PathVariable Integer usuarioId) {
+    public ResponseEntity<List<ObraDTO>> obtenerObrasPorUsuario(
+            @PathVariable Integer usuarioId,
+            @RequestParam(required = false) Integer usuarioIdConsulta) {
 
         usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
@@ -35,7 +38,7 @@ public class ObrasDeUsuarioController {
         }
 
         List<ObraDTO> dtos = obras.stream()
-                .map(this::convertirADTO)
+                .map(o -> convertirADTO(o, usuarioIdConsulta))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
@@ -44,31 +47,29 @@ public class ObrasDeUsuarioController {
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ObraDTO> crearObraParaUsuario(
             @PathVariable Integer usuarioId,
-            @RequestBody ObraDTO obraDTO) {
+            @RequestBody ObraDTO obraDTO,
+            @RequestParam(required = false) Integer usuarioIdConsulta) {
 
-        // Verifica que el usuario existe antes de intentar guardar la obra
         usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
         Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada));
+        return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada, usuarioIdConsulta));
     }
 
     @PutMapping("/{usuarioId}/{obraId}")
     public ResponseEntity<ObraDTO> actualizarObraDeUsuario(
             @PathVariable Integer usuarioId,
             @PathVariable Integer obraId,
-            @RequestBody ObraDTO obraDTO) {
+            @RequestBody ObraDTO obraDTO,
+            @RequestParam(required = false) Integer usuarioIdConsulta) {
 
         Obra obraExistente = obraService.buscarPorId(obraId)
                 .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + obraId));
 
-
         if (!obraExistente.getUsuario().getIdUsuario().equals(usuarioId)) {
-
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-
 
         obraExistente.setTitulo(obraDTO.getTitulo());
         obraExistente.setDescripcion(obraDTO.getDescripcion());
@@ -81,7 +82,7 @@ public class ObrasDeUsuarioController {
         obraExistente.setMedidas(obraDTO.getMedidas());
 
         Obra actualizada = obraService.guardar(obraExistente);
-        return ResponseEntity.ok(convertirADTO(actualizada));
+        return ResponseEntity.ok(convertirADTO(actualizada, usuarioIdConsulta));
     }
 
     @DeleteMapping("/{usuarioId}/{obraId}")
@@ -102,7 +103,7 @@ public class ObrasDeUsuarioController {
 
     @DeleteMapping("/{usuarioId}")
     public ResponseEntity<Void> eliminarTodasLasObrasDeUsuario(@PathVariable Integer usuarioId) {
-        // Verificar que el usuario existe
+
         usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
 
@@ -111,7 +112,7 @@ public class ObrasDeUsuarioController {
         return ResponseEntity.noContent().build();
     }
 
-    private ObraDTO convertirADTO(Obra o) {
+    private ObraDTO convertirADTO(Obra o, Integer usuarioIdConsulta) {
         Integer idUsuario = (o.getUsuario() != null) ? o.getUsuario().getIdUsuario() : null;
 
         String nombreAutor = (o.getUsuario() != null) ? o.getUsuario().getUsuario() : "Desconocido";
@@ -140,9 +141,9 @@ public class ObrasDeUsuarioController {
                 .imagen3(o.getImagen3())
                 .tecnicas(o.getTecnicas())
                 .medidas(o.getMedidas())
-                .likes(o.getLikes())
+                .likes(favoritosService.likesPorObra(o.getIdObra().longValue()))
+                .esFavorito(favoritosService.esObraFavorita(usuarioIdConsulta, o.getIdObra()))
                 .idUsuario(idUsuario)
-                // Se incluyen los nuevos campos poblados
                 .idCategoria(idCategoria)
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)

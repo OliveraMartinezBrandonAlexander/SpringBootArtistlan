@@ -1,11 +1,7 @@
 package com.example.demo.dto;
-
-import com.example.demo.model.Servicio;
 import com.example.demo.model.CategoriaServicios;
-import lombok.Data;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import com.example.demo.model.Servicio;
+import lombok.*;
 
 @Data
 @Builder
@@ -18,6 +14,8 @@ public class ServicioDTO {
     private String descripcion;
     private String contacto;
     private String tecnicas;
+    private Integer likes;
+    private Boolean esFavorito;
 
     private Integer idUsuario;
     private String nombreUsuario;
@@ -32,15 +30,12 @@ public class ServicioDTO {
         this.descripcion = s.getDescripcion();
         this.contacto = s.getContacto();
         this.tecnicas = s.getTecnicas();
-
         this.idUsuario = s.getUsuario().getIdUsuario();
         this.nombreUsuario = s.getUsuario().getUsuario();
-        this.fotoPerfilAutor= s.getUsuario().getFotoPerfil();
+        this.fotoPerfilAutor = s.getUsuario().getFotoPerfil();
 
         if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
-
             CategoriaServicios cs = s.getCategoriasServicios().iterator().next();
-
             if (cs.getCategoria() != null) {
                 this.idCategoria = cs.getCategoria().getIdCategoria();
                 this.categoria = cs.getCategoria().getNombreCategoria();

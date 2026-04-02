@@ -1,12 +1,7 @@
 package com.example.demo.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
+import lombok.*;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -16,46 +11,43 @@ import java.util.Set;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "obra")
+@Table(name = "Obra")
 public class Obra {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ID_OBRA")
+    @Column(name = "id_obra")
     private Integer idObra;
 
-    @Column(name = "TITULO")
+    @Column(name = "titulo", nullable = false, length = 100)
     private String titulo;
 
-    @Column(name = "DESCRIPCION")
+    @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 
-    @Column(name = "ESTADO")
+    @Column(name = "estado", nullable = false, length = 20)
     private String estado;
 
-    @Column(name = "PRECIO")
+    @Column(name = "precio")
     private Double precio;
 
-    @Column(name = "IMAGEN1")
+    @Column(name = "imagen1", nullable = false, length = 500)
     private String imagen1;
 
-    @Column(name = "IMAGEN2")
+    @Column(name = "imagen2", length = 500)
     private String imagen2;
 
-    @Column(name = "IMAGEN3")
+    @Column(name = "imagen3", length = 500)
     private String imagen3;
 
-    @Column(name = "TECNICAS")
+    @Column(name = "tecnicas", length = 255)
     private String tecnicas;
 
-    @Column(name = "MEDIDAS")
+    @Column(name = "medidas", length = 100)
     private String medidas;
 
-    @Column(name = "LIKES")
-    private Integer likes;
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ID_USUARIO", nullable = false)
+    @JoinColumn(name = "id_usuario", nullable = false)
     private Usuario usuario;
 
     @OneToMany(mappedBy = "obra", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

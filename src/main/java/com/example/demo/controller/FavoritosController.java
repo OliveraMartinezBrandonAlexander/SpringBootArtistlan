@@ -1,119 +1,81 @@
 package com.example.demo.controller;
-
 import com.example.demo.dto.FavoritosDTO;
 import com.example.demo.model.Favoritos;
-import com.example.demo.model.Obra;
-import com.example.demo.model.Servicio;
-import com.example.demo.model.Usuario;
 import com.example.demo.service.FavoritosService;
-import com.example.demo.service.ObraService;
-import com.example.demo.service.ServicioService;
-import com.example.demo.service.UsuarioService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/favoritos")
+@RequiredArgsConstructor
 public class FavoritosController {
 
-    @Autowired
-    private FavoritosService favoritosService;
+    private final FavoritosService favoritosService;
 
-    @Autowired
-    private UsuarioService usuarioService;
+    @PostMapping
+    public ResponseEntity<?> agregarFavorito(@RequestBody FavoritosDTO dto) {
+        try {
+            Favoritos favorito = favoritosService.agregarFavorito(dto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(toDto(favorito));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
 
-    @Autowired
-    private ObraService obraService;
+    }
+    @DeleteMapping
+    public ResponseEntity<?> eliminarFavorito(@RequestBody FavoritosDTO dto) {
+        try {
+            favoritosService.eliminarFavorito(dto);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+    @GetMapping("/user/{id}")
+    public ResponseEntity<List<FavoritosDTO>> favoritosPorUsuario(@PathVariable Long id) {
+        List<FavoritosDTO> favoritos = favoritosService.obtenerFavoritosPorUsuario(id)
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+        if (favoritos.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(favoritos);
+    }
 
-    @Autowired
-    private ServicioService servicioService;
+    @GetMapping("/likes/obra/{idObra}")
+    public ResponseEntity<Integer> likesObra(@PathVariable Long idObra) {
+        return ResponseEntity.ok(favoritosService.likesPorObra(idObra));
+    }
+    @GetMapping("/likes/servicio/{idServicio}")
+    public ResponseEntity<Integer> likesServicio(@PathVariable Long idServicio) {
+        return ResponseEntity.ok(favoritosService.likesPorServicio(idServicio));
+    }
 
-
+    @GetMapping("/likes/usuario/{idArtista}")
+    public ResponseEntity<Integer> likesUsuario(@PathVariable Long idArtista) {
+        return ResponseEntity.ok(favoritosService.likesPorArtista(idArtista));
+    }
 
     private FavoritosDTO toDto(Favoritos f) {
         return FavoritosDTO.builder()
-                .id_favorito(f.getId_favorito())
-                .id_usuario(f.getUsuario().getIdUsuario())
-                .id_obra(f.getObra() != null ? f.getObra().getIdObra() : null)
-                .id_servicio(f.getServicio() != null ? f.getServicio().getIdServicio() : null)
+                .idFavorito(f.getIdFavorito())
+                .idUsuario(f.getUsuario().getIdUsuario())
+                .idObra(f.getObra() != null ? f.getObra().getIdObra() : null)
+                .idServicio(f.getServicio() != null ? f.getServicio().getIdServicio() : null)
+                .idArtista(f.getArtista() != null ? f.getArtista().getIdUsuario() : null)
                 .build();
-    }
-
-
-
-    @PostMapping
-    public ResponseEntity<FavoritosDTO> crear(@RequestBody FavoritosDTO dto) {
-
-        if (dto.getId_usuario() == null) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        // al menos uno de estos debe venir
-        if (dto.getId_obra() == null && dto.getId_servicio() == null) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        // Usuario debe existir
-        Usuario usuario = usuarioService.buscarPorId(dto.getId_usuario())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        Obra obra = null;
-        if (dto.getId_obra() != null) {
-            obra = obraService.buscarPorId(dto.getId_obra())
-                    .orElseThrow(() -> new RuntimeException("Obra no encontrada"));
-        }
-
-        Servicio servicio = null;
-        if (dto.getId_servicio() != null) {
-            servicio = servicioService.buscarPorId(dto.getId_servicio())
-                    .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
-        }
-
-        Favoritos fav = new Favoritos();
-        fav.setUsuario(usuario);
-        fav.setObra(obra);
-        fav.setServicio(servicio);
-
-        Favoritos guardado = favoritosService.guardar(fav);
-
-        return ResponseEntity.ok(toDto(guardado));
-    }
-
-
-
-    @GetMapping
-    public ResponseEntity<List<FavoritosDTO>> listar() {
-        List<Favoritos> lista = favoritosService.listar();
-        if (lista.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
-
-        List<FavoritosDTO> dtos = lista.stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(dtos);
-    }
-
-
-
-    @GetMapping("/{id}")
-    public ResponseEntity<FavoritosDTO> obtener(@PathVariable Integer id) {
-        Optional<Favoritos> opt = favoritosService.buscarPorId(id);
-        return opt.map(f -> ResponseEntity.ok(toDto(f)))
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
-        favoritosService.eliminar(id);
-        return ResponseEntity.noContent().build();
     }
 }

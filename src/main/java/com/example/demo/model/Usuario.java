@@ -22,39 +22,40 @@ public class Usuario {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ID_USUARIO")
+    @Column(name = "id_usuario")
     private Integer idUsuario;
 
-    @Column(name = "NOMBRE_COMPLETO")
+    @Column(name = "nombre_completo", nullable = false, length = 100)
     private String nombreCompleto;
 
-    @Column(name = "USUARIO")
+    @Column(name = "usuario", nullable = false, unique = true, length = 50)
     private String usuario;
 
-    @Column(name = "CORREO")
+    @Column(name = "correo", nullable = false, unique = true, length = 100)
     private String correo;
 
-    @Column(name = "CONTRASENA")
+    @Column(name = "contrasena", nullable = false, length = 255)
     private String contrasena;
 
-    @Column(name = "DESCRIPCION")
+    @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 
-    @Column(name = "FOTO_PERFIL")
+    @Column(name = "foto_perfil", length = 500)
     private String fotoPerfil;
 
-    @Column(name = "TELEFONO")
+    @Column(name = "telefono", length = 20)
     private String telefono;
 
-    @Column(name = "REDES_SOCIALES")
+    @Column(name = "redes_sociales", columnDefinition = "TEXT")
     private String redesSociales;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-    @Column(name = "FECHA_NACIMIENTO")
+    @Column(name = "fecha_nacimiento", nullable = false)
     private LocalDate fechaNacimiento;
 
-    @Column(name = "ADMIN_USUARIO")
-    private int adminUsuario;
+    @Column(name = "rol", length = 20)
+    @Builder.Default
+    private String rol = "USER";
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL)
     @JsonManagedReference

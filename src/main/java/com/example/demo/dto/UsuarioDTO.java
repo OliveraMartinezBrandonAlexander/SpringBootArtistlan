@@ -1,9 +1,6 @@
 package com.example.demo.dto;
 
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDate;
 
@@ -22,7 +19,9 @@ public class UsuarioDTO {
     private String telefono;
     private String redesSociales;
     private LocalDate fechaNacimiento;
-    private Integer adminUsuario;
+    private String rol;
+    private Integer likes;
+    private Boolean esFavorito;
 
     private Integer idCategoria;
     private String categoria;

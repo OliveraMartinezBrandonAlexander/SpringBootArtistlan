@@ -93,7 +93,7 @@ public class UsuarioServiceImpl implements UsuarioService {
             u.setTelefono(datos.getTelefono());
             u.setRedesSociales(datos.getRedesSociales());
             u.setFechaNacimiento(datos.getFechaNacimiento());
-            u.setAdminUsuario(datos.getAdminUsuario());
+            u.setRol(datos.getRol() == null || datos.getRol().isBlank() ? "USER" : datos.getRol());
             return repo.save(u);
         });
     }
@@ -176,7 +176,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
+        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
         return u;
     }
 
@@ -194,8 +194,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
-
+        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
 
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());

@@ -54,7 +54,6 @@ public class ObraServiceImpl implements ObraService {
             o.setImagen3(obra.getImagen3());
             o.setTecnicas(obra.getTecnicas());
             o.setMedidas(obra.getMedidas());
-            o.setLikes(obra.getLikes());
             o.setUsuario(obra.getUsuario());
             return obraRepository.save(o);
         });
@@ -80,8 +79,6 @@ public class ObraServiceImpl implements ObraService {
         obra.setImagen3(obraDTO.getImagen3());
         obra.setTecnicas(obraDTO.getTecnicas());
         obra.setMedidas(obraDTO.getMedidas());
-        obra.setLikes(obraDTO.getLikes() != null ? obraDTO.getLikes() : 0); // Asegurando que likes no sea null
-
         obra.setUsuario(usuario);
 
         Obra obraGuardada = obraRepository.save(obra);

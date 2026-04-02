@@ -1,16 +1,28 @@
 package com.example.demo.model;
-
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "favorito")
-@Data
+@Table(
+        name = "Favorito",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"id_usuario", "id_obra"}),
+                @UniqueConstraint(columnNames = {"id_usuario", "id_servicio"}),
+                @UniqueConstraint(columnNames = {"id_usuario", "id_artista"})
+        }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Favoritos {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id_favorito;
+    @Column(name = "id_favorito")
+    private Integer idFavorito;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_usuario", nullable = false)
@@ -24,6 +36,10 @@ public class Favoritos {
     @JoinColumn(name = "id_servicio")
     private Servicio servicio;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_artista")
+    private Usuario artista;
 
-
+    @Column(name = "fecha", insertable = false, updatable = false)
+    private LocalDateTime fecha;
 }

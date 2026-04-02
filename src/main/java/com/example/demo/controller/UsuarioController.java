@@ -9,6 +9,7 @@ import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.FavoritosService;
 import com.example.demo.service.UsuarioIdCategoriaService;
 import com.example.demo.service.UsuarioService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -36,28 +37,29 @@ public class UsuarioController {
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
     private final UsuarioIdCategoriaService usuarioIdCategoriaService;
+    private final FavoritosService favoritosService;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @GetMapping
-    public ResponseEntity<List<UsuarioDTO>> obtenerTodos() {
+    public ResponseEntity<List<UsuarioDTO>> obtenerTodos(@RequestParam(required = false) Integer usuarioId) {
         List<Usuario> usuarios = usuarioService.todosUsuarios();
         if (usuarios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<UsuarioDTO> dtos = usuarios.stream()
-                .map(this::convertirADTO)
+                .map(u -> convertirADTO(u, null))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id) {
+    public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id,
+                                                   @RequestParam(required = false) Integer usuarioId) {
         return usuarioRepository.findByIdConCategorias(id)
-                .map(this::convertirADTO)
-
+                .map(u -> convertirADTO(u, null))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -66,7 +68,7 @@ public class UsuarioController {
     public ResponseEntity<UsuarioDTO> obtenerCategoriaUsuario(@PathVariable Integer id) {
         return usuarioRepository.findByIdConCategorias(id)
                 .map(u -> {
-                    UsuarioDTO dto = convertirADTO(u);
+                    UsuarioDTO dto = convertirADTO(u, null);
                     dto.setContrasena(null);
                     return ResponseEntity.ok(dto);
                 })
@@ -87,7 +89,7 @@ public class UsuarioController {
 
         List<UsuarioDTO> creados = usuarios.stream()
                 .map(usuarioService::crearUsuarioConCategoria)
-                .map(this::convertirADTO)
+                .map(u -> convertirADTO(u, null))
                 .peek(dto -> dto.setContrasena(null))
                 .collect(Collectors.toList());
 
@@ -98,7 +100,7 @@ public class UsuarioController {
     public ResponseEntity<UsuarioDTO> editarUsuario(@PathVariable Integer id, @RequestBody UsuarioDTO dto) {
         try {
             Usuario actualizado = usuarioService.actualizarUsuarioConCategoria(id, dto);
-            return ResponseEntity.ok(convertirADTO(actualizado));
+            return ResponseEntity.ok(convertirADTO(actualizado, null));
 
         } catch (java.util.NoSuchElementException e) {
             System.err.println("ERROR: Usuario o Categoría no encontrada: " + e.getMessage());
@@ -138,7 +140,7 @@ public class UsuarioController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
         }
 
-        UsuarioDTO dto = convertirADTO(user.get());
+        UsuarioDTO dto = convertirADTO(user.get(), null);
         dto.setContrasena(null);
         return ResponseEntity.ok(dto);
     }
@@ -165,9 +167,9 @@ public class UsuarioController {
         usuario.setFotoPerfil(body.getFotoPerfil());
 
         Usuario actualizado = usuarioRepository.save(usuario);
-        return ResponseEntity.ok(convertirADTO(actualizado));
+        return ResponseEntity.ok(convertirADTO(actualizado, null));
     }
-    private UsuarioDTO convertirADTO(Usuario u) {
+    private UsuarioDTO convertirADTO(Usuario u, Integer usuarioIdConsulta) {
         UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
@@ -179,7 +181,9 @@ public class UsuarioController {
                 .telefono(u.getTelefono())
                 .redesSociales(u.getRedesSociales())
                 .fechaNacimiento(u.getFechaNacimiento())
-                .adminUsuario(u.getAdminUsuario())
+                .rol(u.getRol())
+                .likes(favoritosService.likesPorArtista(u.getIdUsuario().longValue()))
+                .esFavorito(false)
                 .idCategoria(null)
                 .categoria(null);
 
@@ -189,6 +193,7 @@ public class UsuarioController {
             builder.idCategoria(cat.getIdCategoria());
             builder.categoria(cat.getNombreCategoria());
         }
+        builder.esFavorito(favoritosService.esArtistaFavorito(usuarioIdConsulta, u.getIdUsuario()));
 
         return builder.build();
     }
@@ -203,7 +208,7 @@ public class UsuarioController {
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setAdminUsuario(dto.getAdminUsuario() == null ? 0 : dto.getAdminUsuario());
+        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());
         }

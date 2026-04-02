@@ -1,15 +1,15 @@
 package com.example.demo.dto;
 
-import lombok.Builder;
-import lombok.Data;
+import lombok.*;
 
 @Data
 @Builder
-public class FavoritosDTO
-{
-    private Integer id_favorito;
-    private Integer id_usuario;
-    private Integer id_obra;
-    private Integer id_servicio;
-
+@NoArgsConstructor
+@AllArgsConstructor
+public class FavoritosDTO {
+    private Integer idFavorito;
+    private Integer idUsuario;
+    private Integer idObra;
+    private Integer idServicio;
+    private Integer idArtista;
 }

@@ -3,13 +3,13 @@ package com.example.demo.controller;
 import com.example.demo.dto.ServicioDTO;
 import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
+import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/servicios")
@@ -17,52 +17,51 @@ import java.util.stream.Collectors;
 public class ServicioController {
 
     private final ServicioService service;
+    private final FavoritosService favoritosService;
 
-    // GET todos
     @GetMapping
-    public ResponseEntity<List<ServicioDTO>> obtenerTodos() {
+    public ResponseEntity<List<ServicioDTO>> obtenerTodos(@RequestParam(required = false) Integer usuarioId) {
         List<Servicio> servicios = service.todosServicios();
         if (servicios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<ServicioDTO> dtos = servicios.stream()
-                .map(this::convertirADTO)
+                .map(s -> convertirADTO(s, usuarioId))
                 .toList();
 
         return ResponseEntity.ok(dtos);
     }
 
-    // GET por id
     @GetMapping("/{id}")
-    public ResponseEntity<ServicioDTO> obtenerPorId(@PathVariable Integer id) {
+    public ResponseEntity<ServicioDTO> obtenerPorId(@PathVariable Integer id,
+                                                    @RequestParam(required = false) Integer usuarioId) {
         return service.buscarPorId(id)
-                .map(s -> ResponseEntity.ok(convertirADTO(s)))
+                .map(s -> ResponseEntity.ok(convertirADTO(s, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // POST
     @PostMapping
-    public ResponseEntity<ServicioDTO> crear(@RequestBody ServicioDTO dto) {
+    public ResponseEntity<ServicioDTO> crear(@RequestBody ServicioDTO dto,
+                                             @RequestParam(required = false) Integer usuarioId) {
         Servicio guardado = service.crearServicioParaUsuario(dto.getIdUsuario(), dto);
-        return ResponseEntity.ok(convertirADTO(guardado));
+        return ResponseEntity.ok(convertirADTO(guardado, usuarioId));
     }
 
-    // PUT por id
     @PutMapping("/{id}")
-    public ResponseEntity<ServicioDTO> actualizarPorId(@PathVariable Integer id, @RequestBody Servicio nuevosDatos) {
+    public ResponseEntity<ServicioDTO> actualizarPorId(@PathVariable Integer id,
+                                                       @RequestBody Servicio nuevosDatos,
+                                                       @RequestParam(required = false) Integer usuarioId) {
         return service.actualizarServicio(id, nuevosDatos)
-                .map(s -> ResponseEntity.ok(convertirADTO(s)))
+                .map(s -> ResponseEntity.ok(convertirADTO(s, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // DELETE por id
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
         boolean eliminado = service.eliminarServicio(id);
         return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
-    // Conversión a DTO
-    private ServicioDTO convertirADTO(Servicio s) {
+    private ServicioDTO convertirADTO(Servicio s, Integer usuarioId) {
 
         ServicioDTO.ServicioDTOBuilder builder = ServicioDTO.builder()
                 .idServicio(s.getIdServicio())
@@ -70,6 +69,8 @@ public class ServicioController {
                 .descripcion(s.getDescripcion())
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
+                .likes(favoritosService.likesPorServicio(s.getIdServicio().longValue()))
+                .esFavorito(favoritosService.esServicioFavorito(usuarioId, s.getIdServicio()))
                 .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)
                 .nombreUsuario(s.getUsuario() != null ? s.getUsuario().getUsuario() : "Desconocido")
                 .fotoPerfilAutor(s.getUsuario() != null ? s.getUsuario().getFotoPerfil() : null);
