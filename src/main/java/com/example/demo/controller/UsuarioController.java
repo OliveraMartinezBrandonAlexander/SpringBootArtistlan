@@ -44,12 +44,12 @@ public class UsuarioController {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @GetMapping
-    public ResponseEntity<List<UsuarioDTO>> obtenerTodos(@RequestParam(required = false) Integer usuarioId) {
+    public ResponseEntity<List<UsuarioDTO>> obtenerTodos(@RequestParam(required = false) Long usuarioId) {
         List<Usuario> usuarios = usuarioService.todosUsuarios();
         if (usuarios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<UsuarioDTO> dtos = usuarios.stream()
-                .map(u -> convertirADTO(u, null))
+                .map(u -> convertirADTO(u, usuarioId))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
@@ -57,9 +57,9 @@ public class UsuarioController {
 
     @GetMapping("/{id}")
     public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id,
-                                                   @RequestParam(required = false) Integer usuarioId) {
+                                                   @RequestParam(required = false) Long usuarioId) {
         return usuarioRepository.findByIdConCategorias(id)
-                .map(u -> convertirADTO(u, null))
+                .map(u -> convertirADTO(u, usuarioId))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -169,7 +169,7 @@ public class UsuarioController {
         Usuario actualizado = usuarioRepository.save(usuario);
         return ResponseEntity.ok(convertirADTO(actualizado, null));
     }
-    private UsuarioDTO convertirADTO(Usuario u, Integer usuarioIdConsulta) {
+    private UsuarioDTO convertirADTO(Usuario u, Long usuarioIdConsulta) {
         UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
@@ -193,10 +193,21 @@ public class UsuarioController {
             builder.idCategoria(cat.getIdCategoria());
             builder.categoria(cat.getNombreCategoria());
         }
-        builder.esFavorito(favoritosService.esArtistaFavorito(usuarioIdConsulta, u.getIdUsuario()));
-
+        builder.esFavorito(esFavoritoParaUsuarioConsulta(usuarioIdConsulta, u.getIdUsuario()));
         return builder.build();
     }
+    private boolean esFavoritoParaUsuarioConsulta(Long usuarioIdConsulta, Integer idArtista) {
+        if (usuarioIdConsulta == null || idArtista == null) {
+            return false;
+        }
+
+        if (usuarioIdConsulta > Integer.MAX_VALUE || usuarioIdConsulta < Integer.MIN_VALUE) {
+            return false;
+        }
+
+        return favoritosService.esArtistaFavorito(usuarioIdConsulta.intValue(), idArtista);
+    }
+
     private Usuario convertirAEntidad(UsuarioDTO dto, Usuario usuarioExistente) {
         Usuario u = usuarioExistente != null ? usuarioExistente : new Usuario();
         u.setIdUsuario(dto.getIdUsuario());
