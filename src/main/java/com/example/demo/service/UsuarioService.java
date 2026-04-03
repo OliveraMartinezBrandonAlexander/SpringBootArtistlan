@@ -25,4 +25,6 @@ public interface UsuarioService {
     List<Usuario> listarAdmins();
 
     Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto);
+
+    Optional<Usuario> actualizarRol(Integer id, String nuevoRol, Integer adminId);
 }

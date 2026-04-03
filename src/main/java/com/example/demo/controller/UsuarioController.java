@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
+import com.example.demo.dto.CambiarRolRequestDTO;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
 import com.example.demo.model.Categoria;
@@ -17,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -157,6 +159,27 @@ public class UsuarioController {
         if (correoExiste) return ResponseEntity.ok("CORREO_DUPLICADO");
         return ResponseEntity.ok("OK");
     }
+
+    @PutMapping("/{id}/rol")
+    public ResponseEntity<?> cambiarRol(@PathVariable Integer id,
+                                        @RequestParam Integer adminId,
+                                        @Valid @RequestBody CambiarRolRequestDTO body) {
+        try {
+            return usuarioService.actualizarRol(id, body.getRol(), adminId)
+                    .map(usuario -> {
+                        UsuarioDTO dto = convertirADTO(usuario, null);
+                        dto.setContrasena(null);
+                        return ResponseEntity.ok(dto);
+                    })
+                    .orElse(ResponseEntity.notFound().build());
+
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     @PutMapping("/{id}/foto-perfil")
     public ResponseEntity<UsuarioDTO> actualizarFotoPerfil(@PathVariable int id,
                                                            @RequestBody ActualizarFotoPerfilRequestDTO body) {

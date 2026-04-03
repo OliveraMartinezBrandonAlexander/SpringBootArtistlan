@@ -15,10 +15,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @Transactional
 public class UsuarioServiceImpl implements UsuarioService {
+
+    private static final Set<String> ROLES_VALIDOS = Set.of("USER", "ADMIN", "MODERADOR");
 
     @Autowired
     private UsuarioRepository repo;
@@ -125,6 +128,32 @@ public class UsuarioServiceImpl implements UsuarioService {
             return repo.save(u);
         });
     }
+
+    @Override
+    public Optional<Usuario> actualizarRol(Integer id, String nuevoRol, Integer adminId) {
+        if (adminId == null) {
+            throw new IllegalArgumentException("adminId es obligatorio para cambiar roles");
+        }
+
+        Usuario admin = repo.findById(adminId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario administrador no encontrado"));
+
+        if (!"ADMIN".equalsIgnoreCase(admin.getRol())) {
+            throw new SecurityException("Solo un ADMIN puede cambiar roles");
+        }
+
+        String rolNormalizado = nuevoRol == null ? "" : nuevoRol.trim().toUpperCase();
+        if (!ROLES_VALIDOS.contains(rolNormalizado)) {
+            throw new IllegalArgumentException("Rol inválido. Valores permitidos: USER, ADMIN, MODERADOR");
+        }
+
+        return repo.findById(id).map(usuario -> {
+            usuario.setRol(rolNormalizado);
+            return repo.save(usuario);
+        });
+    }
+
+
     @Override
     public Usuario actualizarUsuarioConCategoria(Integer id, UsuarioDTO dto) {
 
