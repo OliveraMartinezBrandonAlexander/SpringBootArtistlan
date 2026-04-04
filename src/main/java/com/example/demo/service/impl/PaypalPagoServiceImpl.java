@@ -2,6 +2,7 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.CapturarOrdenPaypalResponseDTO;
 import com.example.demo.dto.CrearOrdenPaypalResponseDTO;
+import com.example.demo.repository.CarritoRepository;
 import com.example.demo.model.CompraObra;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
@@ -37,6 +38,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private static final String MONEDA = "MXN";
 
     private final PayPalHttpClient payPalHttpClient;
+    private final CarritoRepository carritoRepository;
     private final CompraObraRepository compraObraRepository;
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
@@ -154,6 +156,10 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             compraObraRepository.save(compra);
 
             obraService.marcarComoVendida(idObra);
+            carritoRepository.eliminarPorUsuarioYObra(
+                    compra.getComprador().getIdUsuario(),
+                    idObra
+            );
 
             return CapturarOrdenPaypalResponseDTO.builder()
                     .idCompra(compra.getIdCompra())
