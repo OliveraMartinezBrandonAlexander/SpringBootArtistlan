@@ -15,4 +15,6 @@ public interface ObraService {
     Obra guardarObraConCategoria(Integer usuarioId, ObraDTO obraDTO);
     List<Obra> buscarPorUsuarioId(Integer usuarioId);
     void eliminarPorUsuarioId(Integer usuarioId);
+    boolean estaDisponibleParaVenta(Integer idObra);
+    Obra marcarComoVendida(Integer idObra);
 }

@@ -143,4 +143,24 @@ public class ObraServiceImpl implements ObraService {
 
         obraRepository.deleteByUsuarioIdUsuario(usuarioId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean estaDisponibleParaVenta(Integer idObra) {
+        Obra obra = obraRepository.findById(idObra)
+                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
+
+        String estado = obra.getEstado();
+        return estado != null && estado.equals("En venta");
+    }
+
+    @Override
+    @Transactional
+    public Obra marcarComoVendida(Integer idObra) {
+        Obra obra = obraRepository.findById(idObra)
+                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
+
+        obra.setEstado("VENDIDA");
+        return obraRepository.save(obra);
+    }
 }
