@@ -22,6 +22,8 @@ public interface CarritoRepository extends JpaRepository<Carrito, Integer> {
 
     boolean existsByUsuarioIdUsuarioAndObraIdObra(Integer idUsuario, Integer idObra);
 
+    boolean existsByObraIdObra(Integer idObra);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             DELETE FROM Carrito c

@@ -13,6 +13,8 @@ public interface ObraService {
     boolean eliminar(Integer id);
     Optional<Obra> actualizarImagen1(Integer id, String urlImagen);
     Obra guardarObraConCategoria(Integer usuarioId, ObraDTO obraDTO);
+    Obra actualizarObraDeUsuario(Integer usuarioId, Integer obraId, ObraDTO obraDTO);
+    void eliminarObraDeUsuario(Integer usuarioId, Integer obraId);
     List<Obra> buscarPorUsuarioId(Integer usuarioId);
     void eliminarPorUsuarioId(Integer usuarioId);
     boolean estaDisponibleParaVenta(Integer idObra);

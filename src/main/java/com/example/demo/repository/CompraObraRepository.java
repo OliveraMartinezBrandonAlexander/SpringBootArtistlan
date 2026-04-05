@@ -9,5 +9,7 @@ public interface CompraObraRepository extends JpaRepository<CompraObra, Integer>
 
     Optional<CompraObra> findByPaypalOrderId(String paypalOrderId);
 
+    boolean existsByObraIdObra(Integer idObra);
+
     boolean existsByObraIdObraAndEstado(Integer idObra, String estado);
 }

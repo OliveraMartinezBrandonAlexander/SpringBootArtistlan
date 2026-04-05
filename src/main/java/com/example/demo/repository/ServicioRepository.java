@@ -7,23 +7,43 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
 
     @Query("""
-    SELECT s FROM Servicio s
-    JOIN FETCH s.categoriasServicios cs
-    JOIN FETCH cs.categoria c
+    SELECT DISTINCT s
+    FROM Servicio s
+    LEFT JOIN FETCH s.categoriasServicios cs
+    LEFT JOIN FETCH cs.categoria
     WHERE s.usuario.idUsuario = :idUsuario
     """)
     List<Servicio> findByUsuarioIdUsuario(@Param("idUsuario") Integer idUsuario);
 
     @Query("""
-    SELECT s FROM Servicio s
+    SELECT DISTINCT s FROM Servicio s
     LEFT JOIN FETCH s.categoriasServicios cs
     LEFT JOIN FETCH cs.categoria
     """)
     List<Servicio> findAllConCategoria();
+
+    @Query("""
+    SELECT DISTINCT s FROM Servicio s
+    LEFT JOIN FETCH s.categoriasServicios cs
+    LEFT JOIN FETCH cs.categoria
+    WHERE s.idServicio = :idServicio
+    """)
+    Optional<Servicio> findByIdConCategoria(@Param("idServicio") Integer idServicio);
+
+    @Query("""
+    SELECT DISTINCT s FROM Servicio s
+    LEFT JOIN FETCH s.categoriasServicios cs
+    LEFT JOIN FETCH cs.categoria
+    WHERE s.idServicio = :idServicio
+      AND s.usuario.idUsuario = :idUsuario
+    """)
+    Optional<Servicio> findByIdServicioAndUsuarioIdUsuario(@Param("idServicio") Integer idServicio,
+                                                           @Param("idUsuario") Integer idUsuario);
 
     @Modifying
     @Query("DELETE FROM Servicio s WHERE s.usuario.idUsuario = :id")

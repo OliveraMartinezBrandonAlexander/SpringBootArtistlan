@@ -34,4 +34,8 @@ public interface FavoritosRepository extends JpaRepository<Favoritos, Integer> {
     Optional<Favoritos> findByUsuarioIdUsuarioAndServicioIdServicio(Integer idUsuario, Integer idServicio);
 
     Optional<Favoritos> findByUsuarioIdUsuarioAndArtistaIdUsuario(Integer idUsuario, Integer idArtista);
+
+    boolean existsByObraIdObra(Integer idObra);
+
+    boolean existsByServicioIdServicio(Integer idServicio);
 }

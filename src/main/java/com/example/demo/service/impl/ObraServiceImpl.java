@@ -6,8 +6,12 @@ import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.CategoriaObrasID;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
+import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.CategoriaObrasRepository;
 import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.CompraCarritoDetalleRepository;
+import com.example.demo.repository.CompraObraRepository;
+import com.example.demo.repository.FavoritosRepository;
 import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ObraService;
@@ -16,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 @Service
@@ -26,6 +31,10 @@ public class ObraServiceImpl implements ObraService {
     private final UsuarioRepository usuarioRepository;
     private final CategoriaObrasRepository categoriaObraRepository;
     private final CategoriaRepository categoriaRepository;
+    private final FavoritosRepository favoritosRepository;
+    private final CarritoRepository carritoRepository;
+    private final CompraObraRepository compraObraRepository;
+    private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
 
     @Override
     public Obra guardar(Obra o) {
@@ -39,81 +48,77 @@ public class ObraServiceImpl implements ObraService {
 
     @Override
     public Optional<Obra> buscarPorId(Integer id) {
-        return obraRepository.findById(id);
+        return obraRepository.findByIdConCategoria(id);
     }
 
     @Override
+    @Transactional
     public Optional<Obra> actualizarObra(Integer id, Obra obra) {
-        return obraRepository.findById(id).map(o -> {
-            o.setTitulo(obra.getTitulo());
-            o.setDescripcion(obra.getDescripcion());
-            o.setEstado(obra.getEstado());
-            o.setPrecio(obra.getPrecio());
-            o.setImagen1(obra.getImagen1());
-            o.setImagen2(obra.getImagen2());
-            o.setImagen3(obra.getImagen3());
-            o.setTecnicas(obra.getTecnicas());
-            o.setMedidas(obra.getMedidas());
-            o.setUsuario(obra.getUsuario());
-            return obraRepository.save(o);
+        return obraRepository.findById(id).map(existente -> {
+            existente.setTitulo(obra.getTitulo());
+            existente.setDescripcion(obra.getDescripcion());
+            existente.setEstado(obra.getEstado());
+            existente.setPrecio(obra.getPrecio());
+            existente.setImagen1(obra.getImagen1());
+            existente.setImagen2(obra.getImagen2());
+            existente.setImagen3(obra.getImagen3());
+            existente.setTecnicas(obra.getTecnicas());
+            existente.setMedidas(obra.getMedidas());
+            return obraRepository.save(existente);
         });
     }
-
 
     @Override
     @Transactional
     public Obra guardarObraConCategoria(Integer usuarioId, ObraDTO obraDTO) {
-        // 1. Obtener y verificar el usuario
         Usuario usuario = usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado en servicio."));
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
 
-        // 2. Crear la entidad Obra y mapear campos desde el DTO
         Obra obra = new Obra();
-
-        obra.setTitulo(obraDTO.getTitulo());
-        obra.setDescripcion(obraDTO.getDescripcion());
-        obra.setEstado(obraDTO.getEstado());
-        obra.setPrecio(obraDTO.getPrecio());
-        obra.setImagen1(obraDTO.getImagen1());
-        obra.setImagen2(obraDTO.getImagen2());
-        obra.setImagen3(obraDTO.getImagen3());
-        obra.setTecnicas(obraDTO.getTecnicas());
-        obra.setMedidas(obraDTO.getMedidas());
+        aplicarCamposEditables(obra, obraDTO);
         obra.setUsuario(usuario);
 
         Obra obraGuardada = obraRepository.save(obra);
+        reemplazarCategoria(obraGuardada, obraDTO.getIdCategoria());
 
-        Integer idCategoria = obraDTO.getIdCategoria();
-
-        if (idCategoria != null && idCategoria > 0) {
-
-            Categoria categoria = categoriaRepository.findById(idCategoria)
-                    .orElseThrow(() -> new RuntimeException("Categoría no encontrada con ID: " + idCategoria));
-
-            CategoriaObrasID categoriaObraID = new CategoriaObrasID(
-                    obraGuardada.getIdObra(),
-                    idCategoria
-            );
-
-            CategoriaObras categoriaObra = new CategoriaObras();
-
-            categoriaObra.setId(categoriaObraID);
-            categoriaObra.setObra(obraGuardada);
-            categoriaObra.setCategoria(categoria);
-
-            categoriaObraRepository.save(categoriaObra);
-        }
-
-        return obraGuardada;
+        return obraRepository.findByIdConCategoria(obraGuardada.getIdObra()).orElse(obraGuardada);
     }
 
     @Override
+    @Transactional
+    public Obra actualizarObraDeUsuario(Integer usuarioId, Integer obraId, ObraDTO obraDTO) {
+        Obra obraExistente = obraRepository.findByIdConCategoria(obraId)
+                .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
+
+        validarPertenencia(obraExistente, usuarioId);
+        aplicarCamposEditables(obraExistente, obraDTO);
+        reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
+
+        Obra guardada = obraRepository.save(obraExistente);
+        return obraRepository.findByIdConCategoria(guardada.getIdObra()).orElse(guardada);
+    }
+
+    @Override
+    @Transactional
+    public void eliminarObraDeUsuario(Integer usuarioId, Integer obraId) {
+        Obra obra = obraRepository.findById(obraId)
+                .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
+
+        validarPertenencia(obra, usuarioId);
+        validarSinRelacionesParaEliminar(obraId);
+        obraRepository.delete(obra);
+    }
+
+    @Override
+    @Transactional
     public boolean eliminar(Integer id) {
-        if (obraRepository.existsById(id)) {
-            obraRepository.deleteById(id);
-            return true;
+        if (!obraRepository.existsById(id)) {
+            return false;
         }
-        return false;
+
+        validarSinRelacionesParaEliminar(id);
+        obraRepository.deleteById(id);
+        return true;
     }
 
     @Override
@@ -128,19 +133,17 @@ public class ObraServiceImpl implements ObraService {
     @Transactional(readOnly = true)
     public List<Obra> buscarPorUsuarioId(Integer usuarioId) {
         List<Obra> obras = obraRepository.findByUsuarioIdUsuario(usuarioId);
-        for (Obra o : obras) {
-            if (o.getCategoriaObras() != null) {
-                o.getCategoriaObras().size();
+        for (Obra obra : obras) {
+            if (obra.getCategoriaObras() != null) {
+                obra.getCategoriaObras().size();
             }
         }
-
         return obras;
     }
 
     @Override
     @Transactional
     public void eliminarPorUsuarioId(Integer usuarioId) {
-
         obraRepository.deleteByUsuarioIdUsuario(usuarioId);
     }
 
@@ -162,5 +165,56 @@ public class ObraServiceImpl implements ObraService {
 
         obra.setEstado("VENDIDA");
         return obraRepository.save(obra);
+    }
+
+    private void aplicarCamposEditables(Obra destino, ObraDTO origen) {
+        destino.setTitulo(origen.getTitulo());
+        destino.setDescripcion(origen.getDescripcion());
+        destino.setEstado(origen.getEstado());
+        destino.setPrecio(origen.getPrecio());
+        destino.setImagen1(origen.getImagen1());
+        destino.setImagen2(origen.getImagen2());
+        destino.setImagen3(origen.getImagen3());
+        destino.setTecnicas(origen.getTecnicas());
+        destino.setMedidas(origen.getMedidas());
+    }
+
+    private void reemplazarCategoria(Obra obra, Integer idCategoria) {
+        if (idCategoria == null) {
+            return;
+        }
+
+        categoriaObraRepository.deleteByObraIdObra(obra.getIdObra());
+        obra.getCategoriaObras().clear();
+
+        if (idCategoria <= 0) {
+            return;
+        }
+
+        Categoria categoria = categoriaRepository.findById(idCategoria)
+                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con ID: " + idCategoria));
+
+        CategoriaObras categoriaObra = new CategoriaObras(
+                new CategoriaObrasID(obra.getIdObra(), categoria.getIdCategoria()),
+                obra,
+                categoria
+        );
+
+        obra.getCategoriaObras().add(categoriaObra);
+    }
+
+    private void validarPertenencia(Obra obra, Integer usuarioId) {
+        if (obra.getUsuario() == null || !usuarioId.equals(obra.getUsuario().getIdUsuario())) {
+            throw new SecurityException("La obra no pertenece al usuario indicado");
+        }
+    }
+
+    private void validarSinRelacionesParaEliminar(Integer obraId) {
+        if (favoritosRepository.existsByObraIdObra(obraId)
+                || carritoRepository.existsByObraIdObra(obraId)
+                || compraObraRepository.existsByObraIdObra(obraId)
+                || compraCarritoDetalleRepository.existsByObraIdObra(obraId)) {
+            throw new IllegalStateException("La obra no se puede eliminar porque tiene favoritos, carrito o compras relacionadas");
+        }
     }
 }

@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CategoriaServiciosRepository extends JpaRepository<CategoriaServicios, CategoriaServiciosID>
 {
-
+    void deleteByServicioIdServicio(Integer idServicio);
 }

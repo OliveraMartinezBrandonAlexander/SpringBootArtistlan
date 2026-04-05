@@ -5,5 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CompraCarritoDetalleRepository extends JpaRepository<CompraCarritoDetalle, Integer> {
 
+    boolean existsByObraIdObra(Integer idObra);
+
     boolean existsByObraIdObraAndCompraCarritoEstado(Integer idObra, String estado);
 }

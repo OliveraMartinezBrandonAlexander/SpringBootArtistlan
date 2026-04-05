@@ -18,6 +18,10 @@ public interface ServicioService {
 
     boolean eliminarServicio(Integer id);
 
+    Servicio actualizarServicioDeUsuario(Integer usuarioId, Integer idServicio, ServicioDTO dto);
+
+    void eliminarServicioDeUsuario(Integer usuarioId, Integer idServicio);
+
     List<Servicio> buscarPorUsuarioId(Integer usuarioId);
 
     Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto);

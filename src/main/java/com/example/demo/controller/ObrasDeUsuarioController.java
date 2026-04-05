@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @RestController
@@ -28,8 +29,9 @@ public class ObrasDeUsuarioController {
             @PathVariable Integer usuarioId,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
 
-        usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
+        if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
 
         List<Obra> obras = obraService.buscarPorUsuarioId(usuarioId);
 
@@ -50,11 +52,16 @@ public class ObrasDeUsuarioController {
             @RequestBody ObraDTO obraDTO,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
 
-        usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
-        Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
+        if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada, usuarioIdConsulta));
+        try {
+            Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada, usuarioIdConsulta));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PutMapping("/{usuarioId}/{obraId}")
@@ -64,25 +71,16 @@ public class ObrasDeUsuarioController {
             @RequestBody ObraDTO obraDTO,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
 
-        Obra obraExistente = obraService.buscarPorId(obraId)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + obraId));
-
-        if (!obraExistente.getUsuario().getIdUsuario().equals(usuarioId)) {
+        try {
+            Obra actualizada = obraService.actualizarObraDeUsuario(usuarioId, obraId, obraDTO);
+            return ResponseEntity.ok(convertirADTO(actualizada, usuarioIdConsulta));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-
-        obraExistente.setTitulo(obraDTO.getTitulo());
-        obraExistente.setDescripcion(obraDTO.getDescripcion());
-        obraExistente.setEstado(obraDTO.getEstado());
-        obraExistente.setPrecio(obraDTO.getPrecio());
-        obraExistente.setImagen1(obraDTO.getImagen1());
-        obraExistente.setImagen2(obraDTO.getImagen2());
-        obraExistente.setImagen3(obraDTO.getImagen3());
-        obraExistente.setTecnicas(obraDTO.getTecnicas());
-        obraExistente.setMedidas(obraDTO.getMedidas());
-
-        Obra actualizada = obraService.guardar(obraExistente);
-        return ResponseEntity.ok(convertirADTO(actualizada, usuarioIdConsulta));
     }
 
     @DeleteMapping("/{usuarioId}/{obraId}")
@@ -90,22 +88,24 @@ public class ObrasDeUsuarioController {
             @PathVariable Integer usuarioId,
             @PathVariable Integer obraId) {
 
-        Obra obra = obraService.buscarPorId(obraId)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + obraId));
-
-        if (!obra.getUsuario().getIdUsuario().equals(usuarioId)) {
+        try {
+            obraService.eliminarObraDeUsuario(usuarioId, obraId);
+            return ResponseEntity.noContent().build();
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-
-        obraService.eliminar(obraId);
-        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{usuarioId}")
     public ResponseEntity<Void> eliminarTodasLasObrasDeUsuario(@PathVariable Integer usuarioId) {
 
-        usuarioService.buscarPorId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + usuarioId));
+        if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
 
         obraService.eliminarPorUsuarioId(usuarioId);
 

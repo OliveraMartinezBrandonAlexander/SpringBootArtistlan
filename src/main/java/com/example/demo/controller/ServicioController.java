@@ -6,6 +6,7 @@ import com.example.demo.model.Servicio;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -57,8 +58,12 @@ public class ServicioController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
-        boolean eliminado = service.eliminarServicio(id);
-        return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        try {
+            boolean eliminado = service.eliminarServicio(id);
+            return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
     }
 
     private ServicioDTO convertirADTO(Servicio s, Integer usuarioId) {

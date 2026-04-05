@@ -3,7 +3,6 @@ package com.example.demo.controller;
 import com.example.demo.dto.ServicioDTO;
 import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
-import com.example.demo.model.Usuario;
 import com.example.demo.service.ServicioService;
 import com.example.demo.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/portafolioPersonal")
@@ -26,14 +25,11 @@ public class ServiciosPortafolioPersonalController {
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<ServicioDTO>> obtenerServiciosPorUsuario(@PathVariable Integer usuarioId) {
 
-        Optional<Usuario> usuario = usuarioService.buscarPorId(usuarioId);
-        if (usuario.isEmpty()) {
+        if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
-        List<ServicioDTO> servicios = servicioService.todosServicios().stream()
-                .filter(s -> s.getUsuario() != null)
-                .filter(s -> s.getUsuario().getIdUsuario().equals(usuarioId))
+        List<ServicioDTO> servicios = servicioService.buscarPorUsuarioId(usuarioId).stream()
                 .map(this::convertirADTO)
                 .toList();
 
@@ -45,37 +41,51 @@ public class ServiciosPortafolioPersonalController {
     public ResponseEntity<ServicioDTO> crearServicio(@PathVariable Integer usuarioId,
                                                      @RequestBody ServicioDTO servicioDTO) {
 
-        Optional<Usuario> usuario = usuarioService.buscarPorId(usuarioId);
-        if (usuario.isEmpty()) {
+        if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
-        Servicio creado = servicioService.crearServicioParaUsuario(usuarioId, servicioDTO);
-
-        return new ResponseEntity<>(convertirADTO(creado), HttpStatus.CREATED);
+        try {
+            Servicio creado = servicioService.crearServicioParaUsuario(usuarioId, servicioDTO);
+            return new ResponseEntity<>(convertirADTO(creado), HttpStatus.CREATED);
+        } catch (NoSuchElementException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
     }
 
-    // PUT: Actualizar un servicio
-    @PutMapping("/{idServicio}")
-    public ResponseEntity<ServicioDTO> actualizarServicio(@PathVariable Integer idServicio,
-                                                          @RequestBody Servicio servicioActualizado) {
+    // PUT: Actualizar un servicio del usuario dueño
+    @PutMapping("/{usuarioId}/{idServicio}")
+    public ResponseEntity<ServicioDTO> actualizarServicio(@PathVariable Integer usuarioId,
+                                                          @PathVariable Integer idServicio,
+                                                          @RequestBody ServicioDTO servicioActualizado) {
 
-        Optional<Servicio> actualizado = servicioService.actualizarServicio(idServicio, servicioActualizado);
-
-        return actualizado
-                .map(s -> new ResponseEntity<>(convertirADTO(s), HttpStatus.OK))
-                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+        try {
+            Servicio actualizado = servicioService.actualizarServicioDeUsuario(usuarioId, idServicio, servicioActualizado);
+            return new ResponseEntity<>(convertirADTO(actualizado), HttpStatus.OK);
+        } catch (NoSuchElementException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        } catch (SecurityException e) {
+            return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+        } catch (IllegalStateException e) {
+            return new ResponseEntity<>(HttpStatus.CONFLICT);
+        }
     }
 
-    // DELETE: Eliminar un servicio
-    @DeleteMapping("/{idServicio}")
-    public ResponseEntity<Void> eliminarServicio(@PathVariable Integer idServicio) {
+    // DELETE: Eliminar un servicio del usuario dueño
+    @DeleteMapping("/{usuarioId}/{idServicio}")
+    public ResponseEntity<Void> eliminarServicio(@PathVariable Integer usuarioId,
+                                                 @PathVariable Integer idServicio) {
 
-        boolean eliminado = servicioService.eliminarServicio(idServicio);
-
-        return eliminado
-                ? new ResponseEntity<>(HttpStatus.NO_CONTENT)
-                : new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        try {
+            servicioService.eliminarServicioDeUsuario(usuarioId, idServicio);
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        } catch (NoSuchElementException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        } catch (SecurityException e) {
+            return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+        } catch (IllegalStateException e) {
+            return new ResponseEntity<>(HttpStatus.CONFLICT);
+        }
     }
 
     private ServicioDTO convertirADTO(Servicio s) {
