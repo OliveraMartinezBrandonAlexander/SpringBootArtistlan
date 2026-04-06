@@ -7,6 +7,8 @@ import com.example.demo.model.Carrito;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
 import com.example.demo.repository.CarritoRepository;
+import com.example.demo.repository.CompraCarritoDetalleRepository;
+import com.example.demo.repository.CompraObraRepository;
 import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.CarritoService;
@@ -27,8 +29,11 @@ import java.util.Optional;
 public class CarritoServiceImpl implements CarritoService {
 
     private static final String ESTADO_EN_VENTA = "En venta";
+    private static final String ESTADO_CAPTURADA = "CAPTURADA";
 
     private final CarritoRepository carritoRepository;
+    private final CompraObraRepository compraObraRepository;
+    private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
     private final UsuarioRepository usuarioRepository;
     private final ObraRepository obraRepository;
     private final FavoritosService favoritosService;
@@ -63,7 +68,7 @@ public class CarritoServiceImpl implements CarritoService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CarritoDTO> obtenerCarritoUsuario(Integer idUsuario) {
         if (idUsuario == null) {
             throw new IllegalArgumentException("idUsuario es obligatorio");
@@ -73,8 +78,20 @@ public class CarritoServiceImpl implements CarritoService {
             throw new EntityNotFoundException("Usuario no encontrado: " + idUsuario);
         }
 
-        return carritoRepository.findByUsuarioId(idUsuario)
-                .stream()
+        List<Carrito> itemsCarrito = carritoRepository.findByUsuarioId(idUsuario);
+        List<Carrito> itemsDisponibles = itemsCarrito.stream()
+                .filter(item -> esObraComprable(item.getObra()))
+                .toList();
+
+        List<Carrito> itemsNoDisponibles = itemsCarrito.stream()
+                .filter(item -> !esObraComprable(item.getObra()))
+                .toList();
+
+        if (!itemsNoDisponibles.isEmpty()) {
+            carritoRepository.deleteAll(itemsNoDisponibles);
+        }
+
+        return itemsDisponibles.stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -127,6 +144,24 @@ public class CarritoServiceImpl implements CarritoService {
         if (!ESTADO_EN_VENTA.equalsIgnoreCase(estado)) {
             throw new IllegalStateException("Solo puedes agregar obras con estado En venta");
         }
+
+        if (tieneCompraCapturada(obra.getIdObra())) {
+            throw new IllegalStateException("La obra ya no está disponible para compra");
+        }
+    }
+
+    private boolean esObraComprable(Obra obra) {
+        if (obra == null || obra.getIdObra() == null) {
+            return false;
+        }
+
+        String estado = obra.getEstado() != null ? obra.getEstado().trim() : "";
+        return ESTADO_EN_VENTA.equalsIgnoreCase(estado) && !tieneCompraCapturada(obra.getIdObra());
+    }
+
+    private boolean tieneCompraCapturada(Integer idObra) {
+        return compraObraRepository.existsByObraIdObraAndEstado(idObra, ESTADO_CAPTURADA)
+                || compraCarritoDetalleRepository.existsByObraIdObraAndCompraCarritoEstado(idObra, ESTADO_CAPTURADA);
     }
 
     private CarritoDTO toDto(Carrito carrito) {

@@ -2,18 +2,19 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.CapturarOrdenPaypalResponseDTO;
 import com.example.demo.dto.CrearOrdenPaypalResponseDTO;
-import com.example.demo.repository.CarritoRepository;
 import com.example.demo.model.CompraObra;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
+import com.example.demo.repository.CarritoRepository;
+import com.example.demo.repository.CompraCarritoDetalleRepository;
 import com.example.demo.repository.CompraObraRepository;
 import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalPagoService;
+import com.paypal.core.PayPalHttpClient;
 import com.paypal.http.HttpResponse;
 import com.paypal.orders.*;
-import com.paypal.core.PayPalHttpClient;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,10 +36,12 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private static final String ESTADO_CREADA = "CREADA";
     private static final String ESTADO_CAPTURADA = "CAPTURADA";
     private static final String ESTADO_ERROR = "ERROR";
+    private static final String ESTADO_EN_VENTA = "En venta";
     private static final String MONEDA = "MXN";
 
     private final PayPalHttpClient payPalHttpClient;
     private final CarritoRepository carritoRepository;
+    private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
     private final CompraObraRepository compraObraRepository;
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
@@ -61,11 +64,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             throw new IllegalArgumentException("No puedes comprar tu propia obra");
         }
 
-        if (!obraService.estaDisponibleParaVenta(idObra)) {
-            throw new IllegalStateException("La obra ya no está disponible para venta");
-        }
-
-        if (compraObraRepository.existsByObraIdObraAndEstado(idObra, ESTADO_CAPTURADA)) {
+        if (!estaObraComprable(obra)) {
             throw new IllegalStateException("La obra ya fue comprada previamente");
         }
 
@@ -122,12 +121,8 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         }
 
         Integer idObra = compra.getObra().getIdObra();
-        if (compraObraRepository.existsByObraIdObraAndEstado(idObra, ESTADO_CAPTURADA)) {
+        if (!estaObraComprable(compra.getObra())) {
             throw new IllegalStateException("La obra ya tiene una compra capturada");
-        }
-
-        if (!obraService.estaDisponibleParaVenta(idObra)) {
-            throw new IllegalStateException("La obra ya no está disponible para venta");
         }
 
         try {
@@ -147,7 +142,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             if (captureId == null || captureId.isBlank()) {
                 compra.setEstado(ESTADO_ERROR);
                 compraObraRepository.save(compra);
-                throw new IllegalStateException("PayPal no devolvió un captureId para la orden capturada");
+                throw new IllegalStateException("PayPal no devolvio un captureId para la orden capturada");
             }
 
             compra.setPaypalCaptureId(captureId);
@@ -156,10 +151,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             compraObraRepository.save(compra);
 
             obraService.marcarComoVendida(idObra);
-            carritoRepository.eliminarPorUsuarioYObra(
-                    compra.getComprador().getIdUsuario(),
-                    idObra
-            );
+            carritoRepository.eliminarTodosPorObra(idObra);
 
             return CapturarOrdenPaypalResponseDTO.builder()
                     .idCompra(compra.getIdCompra())
@@ -221,6 +213,20 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
 
         Capture capture = purchaseUnit.payments().captures().get(0);
         return capture.id();
+    }
+
+    private boolean estaObraComprable(Obra obra) {
+        if (obra == null || obra.getIdObra() == null) {
+            return false;
+        }
+
+        String estado = obra.getEstado() != null ? obra.getEstado().trim() : "";
+        if (!ESTADO_EN_VENTA.equalsIgnoreCase(estado)) {
+            return false;
+        }
+
+        return !compraObraRepository.existsByObraIdObraAndEstado(obra.getIdObra(), ESTADO_CAPTURADA)
+                && !compraCarritoDetalleRepository.existsByObraIdObraAndCompraCarritoEstado(obra.getIdObra(), ESTADO_CAPTURADA);
     }
 
     private BigDecimal obtenerMontoDesdeObra(Obra obra) {

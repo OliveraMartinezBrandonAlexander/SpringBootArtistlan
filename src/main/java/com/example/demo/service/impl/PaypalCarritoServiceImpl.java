@@ -57,9 +57,9 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
         Usuario comprador = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado: " + idUsuario));
 
-        List<Carrito> itemsCarrito = carritoRepository.findByUsuarioId(idUsuario);
+        List<Carrito> itemsCarrito = obtenerItemsComprablesDelCarrito(idUsuario);
         if (itemsCarrito.isEmpty()) {
-            throw new IllegalStateException("El carrito está vacío");
+            throw new IllegalStateException("El carrito esta vacio");
         }
 
         List<CompraCarritoDetalle> detalles = new ArrayList<>();
@@ -159,7 +159,7 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
             if (captureId == null || captureId.isBlank()) {
                 compraCarrito.setEstado(ESTADO_ERROR);
                 compraCarritoRepository.save(compraCarrito);
-                throw new IllegalStateException("PayPal no devolvió un captureId para la orden capturada");
+                throw new IllegalStateException("PayPal no devolvio un captureId para la orden capturada");
             }
 
             compraCarrito.setPaypalCaptureId(captureId);
@@ -167,11 +167,10 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
             compraCarrito.setFechaCaptura(LocalDateTime.now());
             compraCarritoRepository.save(compraCarrito);
 
-            Integer idComprador = compraCarrito.getComprador().getIdUsuario();
             for (CompraCarritoDetalle detalle : compraCarrito.getDetalles()) {
                 Integer idObra = detalle.getObra().getIdObra();
                 obraService.marcarComoVendida(idObra);
-                carritoRepository.eliminarPorUsuarioYObra(idComprador, idObra);
+                carritoRepository.eliminarTodosPorObra(idObra);
             }
 
             return CapturarOrdenPaypalCarritoResponseDTO.builder()
@@ -218,15 +217,46 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
         validarObraDisponibleParaCheckout(comprador, obra);
 
         if (!obraService.estaDisponibleParaVenta(obra.getIdObra())) {
-            throw new IllegalStateException("La obra ya no está disponible para venta. Obra ID: " + obra.getIdObra());
+            throw new IllegalStateException("La obra ya no esta disponible para venta. Obra ID: " + obra.getIdObra());
         }
     }
 
     private void validarEstadoEnVenta(Obra obra) {
         String estado = obra.getEstado() != null ? obra.getEstado().trim() : "";
         if (!ESTADO_EN_VENTA.equalsIgnoreCase(estado)) {
-            throw new IllegalStateException("La obra no está disponible para venta. Obra ID: " + obra.getIdObra());
+            throw new IllegalStateException("La obra no esta disponible para venta. Obra ID: " + obra.getIdObra());
         }
+    }
+
+    private List<Carrito> obtenerItemsComprablesDelCarrito(Integer idUsuario) {
+        List<Carrito> itemsCarrito = carritoRepository.findByUsuarioId(idUsuario);
+        List<Carrito> itemsDisponibles = itemsCarrito.stream()
+                .filter(item -> esObraComprable(item.getObra()))
+                .toList();
+
+        List<Carrito> itemsNoDisponibles = itemsCarrito.stream()
+                .filter(item -> !esObraComprable(item.getObra()))
+                .toList();
+
+        if (!itemsNoDisponibles.isEmpty()) {
+            carritoRepository.deleteAll(itemsNoDisponibles);
+        }
+
+        return itemsDisponibles;
+    }
+
+    private boolean esObraComprable(Obra obra) {
+        if (obra == null || obra.getIdObra() == null) {
+            return false;
+        }
+
+        String estado = obra.getEstado() != null ? obra.getEstado().trim() : "";
+        if (!ESTADO_EN_VENTA.equalsIgnoreCase(estado)) {
+            return false;
+        }
+
+        return !compraObraRepository.existsByObraIdObraAndEstado(obra.getIdObra(), ESTADO_CAPTURADA)
+                && !compraCarritoDetalleRepository.existsByObraIdObraAndCompraCarritoEstado(obra.getIdObra(), ESTADO_CAPTURADA);
     }
 
     private OrderRequest construirOrdenRequest(List<Carrito> itemsCarrito, BigDecimal montoTotal) {
@@ -287,4 +317,3 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
         return monto;
     }
 }
-

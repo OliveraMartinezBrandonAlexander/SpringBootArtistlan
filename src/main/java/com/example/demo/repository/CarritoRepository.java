@@ -32,4 +32,11 @@ public interface CarritoRepository extends JpaRepository<Carrito, Integer> {
             """)
     int eliminarPorUsuarioYObra(@Param("idUsuario") Integer idUsuario,
                                 @Param("idObra") Integer idObra);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            DELETE FROM Carrito c
+            WHERE c.obra.idObra = :idObra
+            """)
+    int eliminarTodosPorObra(@Param("idObra") Integer idObra);
 }
