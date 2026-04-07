@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
         name = "compra_obra",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uq_compra_obra_paypal_order", columnNames = "paypal_order_id"),
-                @UniqueConstraint(name = "uq_compra_obra_paypal_capture", columnNames = "paypal_capture_id")
+                @UniqueConstraint(name = "uq_compra_obra_paypal_capture", columnNames = "paypal_capture_id"),
+                @UniqueConstraint(name = "uq_compra_obra_solicitud", columnNames = "id_solicitud")
         }
 )
 @Getter
@@ -37,6 +38,10 @@ public class CompraObra {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_vendedor", nullable = false)
     private Usuario vendedor;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_solicitud")
+    private SolicitudCompraObra solicitud;
 
     @Column(name = "monto", nullable = false, precision = 10, scale = 2)
     private BigDecimal monto;

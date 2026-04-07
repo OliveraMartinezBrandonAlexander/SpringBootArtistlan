@@ -1,9 +1,6 @@
 package com.example.demo.dto;
 
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 
 @Data
 @Builder
@@ -20,13 +17,17 @@ public class ObraDTO {
     private String imagen3;
     private String tecnicas;
     private String medidas;
+    private Boolean confirmacionAutoria;
+
     private Integer likes;
     private Boolean esFavorito;
-
     private Integer idUsuario;
     private Integer idCategoria;
-
     private String nombreAutor;
     private String nombreCategoria;
     private String fotoPerfilAutor;
+
+    private Boolean editable;
+    private Boolean eliminable;
+    private Boolean puedeSolicitarCompra;
 }

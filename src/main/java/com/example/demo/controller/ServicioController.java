@@ -6,7 +6,6 @@ import com.example.demo.model.Servicio;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -58,12 +57,8 @@ public class ServicioController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
-        try {
-            boolean eliminado = service.eliminarServicio(id);
-            return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        boolean eliminado = service.eliminarServicio(id);
+        return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     private ServicioDTO convertirADTO(Servicio s, Integer usuarioId) {
@@ -72,8 +67,11 @@ public class ServicioController {
                 .idServicio(s.getIdServicio())
                 .titulo(s.getTitulo())
                 .descripcion(s.getDescripcion())
+                .tipoContacto(s.getTipoContacto())
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
+                .precioMin(s.getPrecioMin())
+                .precioMax(s.getPrecioMax())
                 .likes(favoritosService.likesPorServicio(s.getIdServicio().longValue()))
                 .esFavorito(favoritosService.esServicioFavorito(usuarioId, s.getIdServicio()))
                 .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)

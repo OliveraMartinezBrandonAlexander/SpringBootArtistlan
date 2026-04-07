@@ -1,24 +1,16 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ObraDTO;
-import com.example.demo.model.Categoria;
-import com.example.demo.model.CategoriaObras;
-import com.example.demo.model.CategoriaObrasID;
-import com.example.demo.model.Obra;
-import com.example.demo.model.Usuario;
-import com.example.demo.repository.CarritoRepository;
-import com.example.demo.repository.CategoriaObrasRepository;
-import com.example.demo.repository.CategoriaRepository;
-import com.example.demo.repository.CompraCarritoDetalleRepository;
-import com.example.demo.repository.CompraObraRepository;
-import com.example.demo.repository.FavoritosRepository;
-import com.example.demo.repository.ObraRepository;
-import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.model.*;
+import com.example.demo.repository.*;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -26,6 +18,10 @@ import java.util.Optional;
 @Service
 @AllArgsConstructor
 public class ObraServiceImpl implements ObraService {
+
+    private static final String ESTADO_EN_VENTA = "EN_VENTA";
+    private static final String ESTADO_RESERVADA = "RESERVADA";
+    private static final String ESTADO_VENDIDA = "VENDIDA";
 
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
@@ -35,6 +31,7 @@ public class ObraServiceImpl implements ObraService {
     private final CarritoRepository carritoRepository;
     private final CompraObraRepository compraObraRepository;
     private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
+    private final SolicitudCompraObraRepository solicitudRepository;
 
     @Override
     public Obra guardar(Obra o) {
@@ -55,10 +52,11 @@ public class ObraServiceImpl implements ObraService {
     @Transactional
     public Optional<Obra> actualizarObra(Integer id, Obra obra) {
         return obraRepository.findById(id).map(existente -> {
+            validarEstadoParaEdicion(existente);
             existente.setTitulo(obra.getTitulo());
             existente.setDescripcion(obra.getDescripcion());
             existente.setEstado(obra.getEstado());
-            existente.setPrecio(obra.getPrecio());
+            // precio intencionalmente no editable
             existente.setImagen1(obra.getImagen1());
             existente.setImagen2(obra.getImagen2());
             existente.setImagen3(obra.getImagen3());
@@ -75,8 +73,9 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
 
         Obra obra = new Obra();
-        aplicarCamposEditables(obra, obraDTO);
+        aplicarCamposCreacion(obra, obraDTO);
         obra.setUsuario(usuario);
+        obra.setFechaPublicacion(LocalDateTime.now());
 
         Obra obraGuardada = obraRepository.save(obra);
         reemplazarCategoria(obraGuardada, obraDTO.getIdCategoria());
@@ -91,7 +90,21 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obraExistente, usuarioId);
-        aplicarCamposEditables(obraExistente, obraDTO);
+        validarEstadoParaEdicion(obraExistente);
+
+        obraExistente.setTitulo(obraDTO.getTitulo());
+        obraExistente.setDescripcion(obraDTO.getDescripcion());
+        obraExistente.setImagen1(obraDTO.getImagen1());
+        obraExistente.setImagen2(obraDTO.getImagen2());
+        obraExistente.setImagen3(obraDTO.getImagen3());
+        obraExistente.setTecnicas(obraDTO.getTecnicas());
+        obraExistente.setMedidas(obraDTO.getMedidas());
+        obraExistente.setConfirmacionAutoria(obraDTO.getConfirmacionAutoria() != null ? obraDTO.getConfirmacionAutoria() : obraExistente.getConfirmacionAutoria());
+
+        if (!"VENDIDA".equalsIgnoreCase(obraExistente.getEstado()) && !"RESERVADA".equalsIgnoreCase(obraExistente.getEstado())) {
+            obraExistente.setEstado(obraDTO.getEstado());
+        }
+
         reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
 
         Obra guardada = obraRepository.save(obraExistente);
@@ -105,18 +118,20 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obra, usuarioId);
-        validarSinRelacionesParaEliminar(obraId);
+        validarEstadoParaEliminar(obra);
+        cancelarSolicitudesPendientes(obra.getIdObra());
         obraRepository.delete(obra);
     }
 
     @Override
     @Transactional
     public boolean eliminar(Integer id) {
-        if (!obraRepository.existsById(id)) {
+        Obra obra = obraRepository.findById(id).orElse(null);
+        if (obra == null) {
             return false;
         }
-
-        validarSinRelacionesParaEliminar(id);
+        validarEstadoParaEliminar(obra);
+        cancelarSolicitudesPendientes(id);
         obraRepository.deleteById(id);
         return true;
     }
@@ -151,32 +166,30 @@ public class ObraServiceImpl implements ObraService {
     @Transactional(readOnly = true)
     public boolean estaDisponibleParaVenta(Integer idObra) {
         Obra obra = obraRepository.findById(idObra)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
-
-        String estado = obra.getEstado();
-        return estado != null && estado.equals("En venta");
+                .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + idObra));
+        return ESTADO_EN_VENTA.equalsIgnoreCase(obra.getEstado());
     }
 
     @Override
     @Transactional
     public Obra marcarComoVendida(Integer idObra) {
         Obra obra = obraRepository.findById(idObra)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
-
-        obra.setEstado("VENDIDA");
+                .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + idObra));
+        obra.setEstado(ESTADO_VENDIDA);
         return obraRepository.save(obra);
     }
 
-    private void aplicarCamposEditables(Obra destino, ObraDTO origen) {
+    private void aplicarCamposCreacion(Obra destino, ObraDTO origen) {
         destino.setTitulo(origen.getTitulo());
         destino.setDescripcion(origen.getDescripcion());
-        destino.setEstado(origen.getEstado());
+        destino.setEstado(origen.getEstado() != null ? origen.getEstado() : ESTADO_EN_VENTA);
         destino.setPrecio(origen.getPrecio());
         destino.setImagen1(origen.getImagen1());
         destino.setImagen2(origen.getImagen2());
         destino.setImagen3(origen.getImagen3());
         destino.setTecnicas(origen.getTecnicas());
         destino.setMedidas(origen.getMedidas());
+        destino.setConfirmacionAutoria(Boolean.TRUE.equals(origen.getConfirmacionAutoria()));
     }
 
     private void reemplazarCategoria(Obra obra, Integer idCategoria) {
@@ -209,12 +222,30 @@ public class ObraServiceImpl implements ObraService {
         }
     }
 
-    private void validarSinRelacionesParaEliminar(Integer obraId) {
-        if (favoritosRepository.existsByObraIdObra(obraId)
-                || carritoRepository.existsByObraIdObra(obraId)
-                || compraObraRepository.existsByObraIdObra(obraId)
-                || compraCarritoDetalleRepository.existsByObraIdObra(obraId)) {
-            throw new IllegalStateException("La obra no se puede eliminar porque tiene favoritos, carrito o compras relacionadas");
+    private void validarEstadoParaEdicion(Obra obra) {
+        if (ESTADO_RESERVADA.equalsIgnoreCase(obra.getEstado()) || ESTADO_VENDIDA.equalsIgnoreCase(obra.getEstado())) {
+            throw new BusinessException("La obra no puede editarse en estado " + obra.getEstado());
         }
+    }
+
+    private void validarEstadoParaEliminar(Obra obra) {
+        if (ESTADO_RESERVADA.equalsIgnoreCase(obra.getEstado()) || ESTADO_VENDIDA.equalsIgnoreCase(obra.getEstado())) {
+            throw new BusinessException("La obra no puede eliminarse en estado " + obra.getEstado());
+        }
+    }
+
+    private void cancelarSolicitudesPendientes(Integer obraId) {
+        List<SolicitudCompraObra> activas = solicitudRepository.findByObraIdObraAndEstadoSolicitudIn(
+                obraId,
+                List.of("PENDIENTE", "ACEPTADA", "RECHAZADA")
+        );
+        for (SolicitudCompraObra solicitud : activas) {
+            if (!"PAGADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
+                solicitud.setEstadoSolicitud("CANCELADA");
+                solicitud.setFechaRespuesta(LocalDateTime.now());
+                solicitud.setMotivoRechazo("Obra eliminada");
+            }
+        }
+        solicitudRepository.saveAll(activas);
     }
 }

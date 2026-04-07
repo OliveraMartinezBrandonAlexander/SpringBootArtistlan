@@ -9,7 +9,8 @@ import java.math.BigDecimal;
 @Table(
         name = "compra_carrito_detalle",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uq_compra_carrito_detalle_compra_obra", columnNames = {"id_compra_carrito", "id_obra"})
+                @UniqueConstraint(name = "uq_compra_carrito_detalle_compra_obra", columnNames = {"id_compra_carrito", "id_obra"}),
+                @UniqueConstraint(name = "uq_compra_carrito_detalle_solicitud", columnNames = {"id_solicitud"})
         }
 )
 @Getter
@@ -35,6 +36,10 @@ public class CompraCarritoDetalle {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_vendedor", nullable = false)
     private Usuario vendedor;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_solicitud")
+    private SolicitudCompraObra solicitud;
 
     @Column(name = "precio_unitario", nullable = false, precision = 10, scale = 2)
     private BigDecimal precioUnitario;

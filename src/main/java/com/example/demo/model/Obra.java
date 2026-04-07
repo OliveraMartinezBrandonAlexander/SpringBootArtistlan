@@ -3,6 +3,7 @@ package com.example.demo.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -11,7 +12,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "Obra")
+@Table(name = "obra")
 public class Obra {
 
     @Id
@@ -46,6 +47,13 @@ public class Obra {
     @Column(name = "medidas", length = 100)
     private String medidas;
 
+    @Column(name = "confirmacion_autoria", nullable = false)
+    @Builder.Default
+    private Boolean confirmacionAutoria = Boolean.FALSE;
+
+    @Column(name = "fecha_publicacion", nullable = false)
+    private LocalDateTime fechaPublicacion;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_usuario", nullable = false)
     private Usuario usuario;
@@ -54,4 +62,11 @@ public class Obra {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Set<CategoriaObras> categoriaObras = new HashSet<>();
+
+    @PrePersist
+    public void prePersist() {
+        if (fechaPublicacion == null) {
+            fechaPublicacion = LocalDateTime.now();
+        }
+    }
 }

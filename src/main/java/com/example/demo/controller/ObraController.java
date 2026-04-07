@@ -7,7 +7,6 @@ import com.example.demo.model.Obra;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -62,12 +61,8 @@ public class ObraController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
-        try {
-            boolean eliminado = service.eliminar(id);
-            return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        boolean eliminado = service.eliminar(id);
+        return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     @PutMapping("/{id}/imagen1")
@@ -97,6 +92,9 @@ public class ObraController {
         int likes = favoritosService.likesPorObra(o.getIdObra().longValue());
         boolean esFavorito = favoritosService.esObraFavorita(usuarioId, o.getIdObra());
 
+        String estado = o.getEstado() != null ? o.getEstado().toUpperCase() : "";
+        boolean propia = usuarioId != null && usuarioId.equals(idUsuario);
+
         return ObraDTO.builder()
                 .idObra(o.getIdObra())
                 .titulo(o.getTitulo())
@@ -108,6 +106,7 @@ public class ObraController {
                 .imagen3(o.getImagen3())
                 .tecnicas(o.getTecnicas())
                 .medidas(o.getMedidas())
+                .confirmacionAutoria(o.getConfirmacionAutoria())
                 .likes(likes)
                 .esFavorito(esFavorito)
                 .idUsuario(idUsuario)
@@ -115,6 +114,9 @@ public class ObraController {
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)
                 .fotoPerfilAutor(fotoPerfilAutor)
+                .editable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .eliminable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .puedeSolicitarCompra("EN_VENTA".equals(estado) && !propia)
                 .build();
     }
 }

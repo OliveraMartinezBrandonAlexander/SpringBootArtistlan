@@ -1,11 +1,8 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ServicioDTO;
-import com.example.demo.model.Categoria;
-import com.example.demo.model.CategoriaServicios;
-import com.example.demo.model.CategoriaServiciosID;
-import com.example.demo.model.Servicio;
-import com.example.demo.model.Usuario;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.model.*;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.repository.FavoritosRepository;
@@ -16,13 +13,19 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class ServicioServiceImpl implements ServicioService {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+\\-()\\s]{8,20}$");
+    private static final Pattern INSTAGRAM_PATTERN = Pattern.compile("^@?[A-Za-z0-9._]{1,30}$");
 
     private final ServicioRepository repo;
     private final UsuarioService usuarioService;
@@ -51,8 +54,10 @@ public class ServicioServiceImpl implements ServicioService {
         return repo.findById(id).map(existente -> {
             existente.setTitulo(servicioActualizado.getTitulo());
             existente.setDescripcion(servicioActualizado.getDescripcion());
+            existente.setTipoContacto(servicioActualizado.getTipoContacto());
             existente.setContacto(servicioActualizado.getContacto());
             existente.setTecnicas(servicioActualizado.getTecnicas());
+            validarContacto(existente.getTipoContacto(), existente.getContacto());
             return repo.save(existente);
         });
     }
@@ -81,7 +86,16 @@ public class ServicioServiceImpl implements ServicioService {
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
         validarPertenencia(existente, usuarioId);
-        aplicarCamposEditables(existente, dto);
+        existente.setTitulo(dto.getTitulo());
+        existente.setDescripcion(dto.getDescripcion());
+        existente.setTipoContacto(dto.getTipoContacto());
+        existente.setContacto(dto.getContacto());
+        existente.setTecnicas(dto.getTecnicas());
+
+        validarContacto(existente.getTipoContacto(), existente.getContacto());
+        validarRangoPrecios(dto.getPrecioMin(), dto.getPrecioMax());
+        // precio no editable en actualización
+
         reemplazarCategoria(existente, dto.getIdCategoria());
 
         Servicio guardado = repo.save(existente);
@@ -105,21 +119,23 @@ public class ServicioServiceImpl implements ServicioService {
         Usuario usuario = usuarioService.buscarPorId(usuarioId)
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
 
+        validarContacto(dto.getTipoContacto(), dto.getContacto());
+        validarRangoPrecios(dto.getPrecioMin(), dto.getPrecioMax());
+
         Servicio servicio = new Servicio();
-        aplicarCamposEditables(servicio, dto);
+        servicio.setTitulo(dto.getTitulo());
+        servicio.setDescripcion(dto.getDescripcion());
+        servicio.setTipoContacto(dto.getTipoContacto());
+        servicio.setContacto(dto.getContacto());
+        servicio.setTecnicas(dto.getTecnicas());
+        servicio.setPrecioMin(dto.getPrecioMin());
+        servicio.setPrecioMax(dto.getPrecioMax());
         servicio.setUsuario(usuario);
 
         Servicio guardado = repo.save(servicio);
         reemplazarCategoria(guardado, dto.getIdCategoria());
 
         return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
-    }
-
-    private void aplicarCamposEditables(Servicio destino, ServicioDTO origen) {
-        destino.setTitulo(origen.getTitulo());
-        destino.setDescripcion(origen.getDescripcion());
-        destino.setContacto(origen.getContacto());
-        destino.setTecnicas(origen.getTecnicas());
     }
 
     private void reemplazarCategoria(Servicio servicio, Integer idCategoria) {
@@ -155,6 +171,44 @@ public class ServicioServiceImpl implements ServicioService {
     private void validarSinRelacionesParaEliminar(Integer idServicio) {
         if (favoritosRepository.existsByServicioIdServicio(idServicio)) {
             throw new IllegalStateException("El servicio no se puede eliminar porque tiene favoritos relacionados");
+        }
+    }
+
+    private void validarRangoPrecios(BigDecimal min, BigDecimal max) {
+        boolean ambosNulos = min == null && max == null;
+        boolean ambosPresentes = min != null && max != null;
+        if (!ambosNulos && !ambosPresentes) {
+            throw new BusinessException("precioMin y precioMax deben venir ambos o ninguno");
+        }
+        if (ambosPresentes && min.compareTo(max) >= 0) {
+            throw new BusinessException("precioMin debe ser menor que precioMax");
+        }
+    }
+
+    private void validarContacto(String tipoContacto, String contacto) {
+        if (tipoContacto == null || contacto == null || contacto.isBlank()) {
+            throw new BusinessException("tipoContacto y contacto son obligatorios");
+        }
+
+        switch (tipoContacto.toUpperCase()) {
+            case "EMAIL" -> {
+                if (!EMAIL_PATTERN.matcher(contacto).matches()) {
+                    throw new BusinessException("Contacto EMAIL inválido");
+                }
+            }
+            case "WHATSAPP", "TELEFONO" -> {
+                if (!PHONE_PATTERN.matcher(contacto).matches()) {
+                    throw new BusinessException("Contacto telefónico inválido");
+                }
+            }
+            case "INSTAGRAM" -> {
+                if (!INSTAGRAM_PATTERN.matcher(contacto).matches()) {
+                    throw new BusinessException("Contacto INSTAGRAM inválido");
+                }
+            }
+            case "OTRO" -> {
+            }
+            default -> throw new BusinessException("tipoContacto no soportado");
         }
     }
 }
