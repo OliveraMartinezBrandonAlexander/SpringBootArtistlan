@@ -7,10 +7,10 @@ import com.example.demo.model.Obra;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -62,12 +62,8 @@ public class ObraController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarPorId(@PathVariable Integer id) {
-        try {
-            boolean eliminado = service.eliminar(id);
-            return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        boolean eliminado = service.eliminar(id);
+        return eliminado ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     @PutMapping("/{id}/imagen1")
@@ -97,17 +93,21 @@ public class ObraController {
         int likes = favoritosService.likesPorObra(o.getIdObra().longValue());
         boolean esFavorito = favoritosService.esObraFavorita(usuarioId, o.getIdObra());
 
+        String estado = normalizarEstado(o.getEstado());
+        boolean propia = usuarioId != null && usuarioId.equals(idUsuario);
+
         return ObraDTO.builder()
                 .idObra(o.getIdObra())
                 .titulo(o.getTitulo())
                 .descripcion(o.getDescripcion())
-                .estado(o.getEstado())
+                .estado(estadoParaMostrar(o.getEstado()))
                 .precio(o.getPrecio())
                 .imagen1(o.getImagen1())
                 .imagen2(o.getImagen2())
                 .imagen3(o.getImagen3())
                 .tecnicas(o.getTecnicas())
                 .medidas(o.getMedidas())
+                .confirmacionAutoria(o.getConfirmacionAutoria())
                 .likes(likes)
                 .esFavorito(esFavorito)
                 .idUsuario(idUsuario)
@@ -115,6 +115,31 @@ public class ObraController {
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)
                 .fotoPerfilAutor(fotoPerfilAutor)
+                .editable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .eliminable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .puedeSolicitarCompra("EN_VENTA".equals(estado) && !propia)
                 .build();
+    }
+
+    private String normalizarEstado(String estado) {
+        if (estado == null) {
+            return "";
+        }
+        String sinAcentos = Normalizer.normalize(estado, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return sinAcentos.toUpperCase()
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+    }
+
+    private String estadoParaMostrar(String estadoOriginal) {
+        String estado = normalizarEstado(estadoOriginal);
+        return switch (estado) {
+            case "EN_VENTA" -> "En venta";
+            case "EN_EXHIBICION" -> "En exhibicion";
+            case "RESERVADA" -> "Reservada";
+            case "VENDIDA" -> "Vendida";
+            default -> estadoOriginal;
+        };
     }
 }

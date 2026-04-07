@@ -2,6 +2,7 @@ package com.example.demo.dto;
 
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -12,20 +13,18 @@ public class CarritoDTO {
     private Integer idCarrito;
     private Integer idUsuario;
     private Integer idObra;
+    private Integer idSolicitud;
     private Integer idArtista;
     private String tituloObra;
     private String descripcion;
-    private String estado;
     private String estadoObra;
-    private Double precio;
+    private BigDecimal precio;
     private String imagen1;
-    private String imagen2;
-    private String imagen3;
     private String tecnicas;
     private String medidas;
-    private Integer likes;
     private String nombreAutor;
-    private String nombreCategoria;
     private String fotoPerfilAutor;
+    private String contactoVendedor;
     private LocalDateTime fechaAgregado;
+    private LocalDateTime reservadaHasta;
 }

@@ -1,24 +1,18 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ObraDTO;
-import com.example.demo.model.Categoria;
-import com.example.demo.model.CategoriaObras;
-import com.example.demo.model.CategoriaObrasID;
-import com.example.demo.model.Obra;
-import com.example.demo.model.Usuario;
-import com.example.demo.repository.CarritoRepository;
-import com.example.demo.repository.CategoriaObrasRepository;
-import com.example.demo.repository.CategoriaRepository;
-import com.example.demo.repository.CompraCarritoDetalleRepository;
-import com.example.demo.repository.CompraObraRepository;
-import com.example.demo.repository.FavoritosRepository;
-import com.example.demo.repository.ObraRepository;
-import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.model.*;
+import com.example.demo.repository.*;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.text.Normalizer;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -26,6 +20,13 @@ import java.util.Optional;
 @Service
 @AllArgsConstructor
 public class ObraServiceImpl implements ObraService {
+
+    private static final String ESTADO_EN_VENTA = "EN_VENTA";
+    private static final String ESTADO_EN_EXHIBICION = "EN_EXHIBICION";
+    private static final String ESTADO_RESERVADA = "RESERVADA";
+    private static final String ESTADO_VENDIDA = "VENDIDA";
+    private static final int CATEGORIA_OBRA_MIN = 1;
+    private static final int CATEGORIA_OBRA_MAX = 18;
 
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
@@ -35,6 +36,7 @@ public class ObraServiceImpl implements ObraService {
     private final CarritoRepository carritoRepository;
     private final CompraObraRepository compraObraRepository;
     private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
+    private final SolicitudCompraObraRepository solicitudRepository;
 
     @Override
     public Obra guardar(Obra o) {
@@ -55,10 +57,25 @@ public class ObraServiceImpl implements ObraService {
     @Transactional
     public Optional<Obra> actualizarObra(Integer id, Obra obra) {
         return obraRepository.findById(id).map(existente -> {
+            validarEstadoParaEdicion(existente);
+            String estadoActual = normalizarEstado(existente.getEstado());
+            String estadoObjetivo = estadoActual;
+
             existente.setTitulo(obra.getTitulo());
             existente.setDescripcion(obra.getDescripcion());
-            existente.setEstado(obra.getEstado());
-            existente.setPrecio(obra.getPrecio());
+            if (obra.getEstado() != null && !obra.getEstado().isBlank()) {
+                estadoObjetivo = normalizarEstado(obra.getEstado());
+                existente.setEstado(estadoObjetivo);
+            }
+
+            // Solo permite fijar precio una vez, al pasar/estar en venta.
+            if (obra.getPrecio() != null
+                    && existente.getPrecio() == null
+                    && ESTADO_EN_VENTA.equals(estadoObjetivo)
+                    && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
+                existente.setPrecio(obra.getPrecio());
+            }
+
             existente.setImagen1(obra.getImagen1());
             existente.setImagen2(obra.getImagen2());
             existente.setImagen3(obra.getImagen3());
@@ -75,8 +92,9 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
 
         Obra obra = new Obra();
-        aplicarCamposEditables(obra, obraDTO);
+        aplicarCamposCreacion(obra, obraDTO);
         obra.setUsuario(usuario);
+        obra.setFechaPublicacion(LocalDateTime.now());
 
         Obra obraGuardada = obraRepository.save(obra);
         reemplazarCategoria(obraGuardada, obraDTO.getIdCategoria());
@@ -91,8 +109,50 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obraExistente, usuarioId);
-        aplicarCamposEditables(obraExistente, obraDTO);
-        reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
+        validarEstadoParaEdicion(obraExistente);
+
+        if (obraDTO.getTitulo() != null) {
+            obraExistente.setTitulo(obraDTO.getTitulo());
+        }
+        if (obraDTO.getDescripcion() != null) {
+            obraExistente.setDescripcion(obraDTO.getDescripcion());
+        }
+        if (obraDTO.getImagen1() != null) {
+            obraExistente.setImagen1(obraDTO.getImagen1());
+        }
+        if (obraDTO.getImagen2() != null) {
+            obraExistente.setImagen2(obraDTO.getImagen2());
+        }
+        if (obraDTO.getImagen3() != null) {
+            obraExistente.setImagen3(obraDTO.getImagen3());
+        }
+        if (obraDTO.getTecnicas() != null) {
+            obraExistente.setTecnicas(obraDTO.getTecnicas());
+        }
+        if (obraDTO.getMedidas() != null) {
+            obraExistente.setMedidas(obraDTO.getMedidas());
+        }
+        obraExistente.setConfirmacionAutoria(obraDTO.getConfirmacionAutoria() != null ? obraDTO.getConfirmacionAutoria() : obraExistente.getConfirmacionAutoria());
+
+        String estadoActual = normalizarEstado(obraExistente.getEstado());
+        String estadoObjetivo = estadoActual;
+        if (obraDTO.getEstado() != null && !obraDTO.getEstado().isBlank()
+                && !ESTADO_VENDIDA.equals(estadoActual)
+                && !ESTADO_RESERVADA.equals(estadoActual)) {
+            estadoObjetivo = normalizarEstado(obraDTO.getEstado());
+            obraExistente.setEstado(estadoObjetivo);
+        }
+
+        if (obraDTO.getPrecio() != null
+                && obraExistente.getPrecio() == null
+                && ESTADO_EN_VENTA.equals(estadoObjetivo)
+                && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
+            obraExistente.setPrecio(obraDTO.getPrecio());
+        }
+
+        if (obraDTO.getIdCategoria() != null && obraDTO.getIdCategoria() > 0) {
+            reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
+        }
 
         Obra guardada = obraRepository.save(obraExistente);
         return obraRepository.findByIdConCategoria(guardada.getIdObra()).orElse(guardada);
@@ -105,19 +165,33 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obra, usuarioId);
-        validarSinRelacionesParaEliminar(obraId);
-        obraRepository.delete(obra);
+        validarEstadoParaEliminar(obra);
+        favoritosRepository.deleteByObraIdObra(obraId);
+        cancelarSolicitudesPendientes(obra.getIdObra());
+        try {
+            obraRepository.delete(obra);
+            obraRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException("No se puede eliminar la obra porque tiene historial de compras o transacciones.");
+        }
     }
 
     @Override
     @Transactional
     public boolean eliminar(Integer id) {
-        if (!obraRepository.existsById(id)) {
+        Obra obra = obraRepository.findById(id).orElse(null);
+        if (obra == null) {
             return false;
         }
-
-        validarSinRelacionesParaEliminar(id);
-        obraRepository.deleteById(id);
+        validarEstadoParaEliminar(obra);
+        favoritosRepository.deleteByObraIdObra(id);
+        cancelarSolicitudesPendientes(id);
+        try {
+            obraRepository.deleteById(id);
+            obraRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException("No se puede eliminar la obra porque tiene historial de compras o transacciones.");
+        }
         return true;
     }
 
@@ -151,32 +225,30 @@ public class ObraServiceImpl implements ObraService {
     @Transactional(readOnly = true)
     public boolean estaDisponibleParaVenta(Integer idObra) {
         Obra obra = obraRepository.findById(idObra)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
-
-        String estado = obra.getEstado();
-        return estado != null && estado.equals("En venta");
+                .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + idObra));
+        return ESTADO_EN_VENTA.equals(normalizarEstado(obra.getEstado()));
     }
 
     @Override
     @Transactional
     public Obra marcarComoVendida(Integer idObra) {
         Obra obra = obraRepository.findById(idObra)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
-
-        obra.setEstado("VENDIDA");
+                .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + idObra));
+        obra.setEstado(ESTADO_VENDIDA);
         return obraRepository.save(obra);
     }
 
-    private void aplicarCamposEditables(Obra destino, ObraDTO origen) {
+    private void aplicarCamposCreacion(Obra destino, ObraDTO origen) {
         destino.setTitulo(origen.getTitulo());
         destino.setDescripcion(origen.getDescripcion());
-        destino.setEstado(origen.getEstado());
+        destino.setEstado(origen.getEstado() != null ? normalizarEstado(origen.getEstado()) : ESTADO_EN_VENTA);
         destino.setPrecio(origen.getPrecio());
         destino.setImagen1(origen.getImagen1());
         destino.setImagen2(origen.getImagen2());
         destino.setImagen3(origen.getImagen3());
         destino.setTecnicas(origen.getTecnicas());
         destino.setMedidas(origen.getMedidas());
+        destino.setConfirmacionAutoria(Boolean.TRUE.equals(origen.getConfirmacionAutoria()));
     }
 
     private void reemplazarCategoria(Obra obra, Integer idCategoria) {
@@ -190,6 +262,7 @@ public class ObraServiceImpl implements ObraService {
         if (idCategoria <= 0) {
             return;
         }
+        validarCategoriaObra(idCategoria);
 
         Categoria categoria = categoriaRepository.findById(idCategoria)
                 .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con ID: " + idCategoria));
@@ -209,12 +282,49 @@ public class ObraServiceImpl implements ObraService {
         }
     }
 
-    private void validarSinRelacionesParaEliminar(Integer obraId) {
-        if (favoritosRepository.existsByObraIdObra(obraId)
-                || carritoRepository.existsByObraIdObra(obraId)
-                || compraObraRepository.existsByObraIdObra(obraId)
-                || compraCarritoDetalleRepository.existsByObraIdObra(obraId)) {
-            throw new IllegalStateException("La obra no se puede eliminar porque tiene favoritos, carrito o compras relacionadas");
+    private void validarEstadoParaEdicion(Obra obra) {
+        String estado = normalizarEstado(obra.getEstado());
+        if (ESTADO_RESERVADA.equals(estado) || ESTADO_VENDIDA.equals(estado)) {
+            throw new BusinessException("La obra no puede editarse en estado " + obra.getEstado());
         }
+    }
+
+    private void validarEstadoParaEliminar(Obra obra) {
+        String estado = normalizarEstado(obra.getEstado());
+        if (ESTADO_RESERVADA.equals(estado) || ESTADO_VENDIDA.equals(estado)) {
+            throw new BusinessException("La obra no puede eliminarse en estado " + obra.getEstado());
+        }
+    }
+
+    private String normalizarEstado(String estado) {
+        if (estado == null) {
+            return "";
+        }
+        String sinAcentos = Normalizer.normalize(estado, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return sinAcentos.toUpperCase()
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+    }
+
+    private void validarCategoriaObra(Integer idCategoria) {
+        if (idCategoria < CATEGORIA_OBRA_MIN || idCategoria > CATEGORIA_OBRA_MAX) {
+            throw new BusinessException("La categoria de obra debe estar entre 1 y 18.");
+        }
+    }
+
+    private void cancelarSolicitudesPendientes(Integer obraId) {
+        List<SolicitudCompraObra> activas = solicitudRepository.findByObraIdObraAndEstadoSolicitudIn(
+                obraId,
+                List.of("PENDIENTE", "ACEPTADA", "RECHAZADA")
+        );
+        for (SolicitudCompraObra solicitud : activas) {
+            if (!"PAGADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
+                solicitud.setEstadoSolicitud("CANCELADA");
+                solicitud.setFechaRespuesta(LocalDateTime.now());
+                solicitud.setMotivoRechazo("Obra eliminada");
+            }
+        }
+        solicitudRepository.saveAll(activas);
     }
 }

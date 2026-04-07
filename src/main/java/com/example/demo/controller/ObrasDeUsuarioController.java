@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.text.Normalizer;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -40,7 +41,7 @@ public class ObrasDeUsuarioController {
         }
 
         List<ObraDTO> dtos = obras.stream()
-                .map(o -> convertirADTO(o, usuarioIdConsulta))
+                .map(o -> convertirADTO(o, usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
@@ -58,7 +59,10 @@ public class ObrasDeUsuarioController {
 
         try {
             Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
-            return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada, usuarioIdConsulta));
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(
+                    guardada,
+                    usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId
+            ));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         }
@@ -73,7 +77,10 @@ public class ObrasDeUsuarioController {
 
         try {
             Obra actualizada = obraService.actualizarObraDeUsuario(usuarioId, obraId, obraDTO);
-            return ResponseEntity.ok(convertirADTO(actualizada, usuarioIdConsulta));
+            return ResponseEntity.ok(convertirADTO(
+                    actualizada,
+                    usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId
+            ));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         } catch (SecurityException e) {
@@ -130,11 +137,14 @@ public class ObrasDeUsuarioController {
             }
         }
 
+        String estado = normalizarEstado(o.getEstado());
+        boolean propia = usuarioIdConsulta != null && usuarioIdConsulta.equals(idUsuario);
+
         return ObraDTO.builder()
                 .idObra(o.getIdObra())
                 .titulo(o.getTitulo())
                 .descripcion(o.getDescripcion())
-                .estado(o.getEstado())
+                .estado(estadoParaMostrar(o.getEstado()))
                 .precio(o.getPrecio())
                 .imagen1(o.getImagen1())
                 .imagen2(o.getImagen2())
@@ -148,6 +158,31 @@ public class ObrasDeUsuarioController {
                 .nombreAutor(nombreAutor)
                 .nombreCategoria(nombreCategoria)
                 .fotoPerfilAutor(fotoPerfilAutor)
+                .editable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .eliminable(!"RESERVADA".equals(estado) && !"VENDIDA".equals(estado) && propia)
+                .puedeSolicitarCompra("EN_VENTA".equals(estado) && !propia)
                 .build();
+    }
+
+    private String normalizarEstado(String estado) {
+        if (estado == null) {
+            return "";
+        }
+        String sinAcentos = Normalizer.normalize(estado, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return sinAcentos.toUpperCase()
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+    }
+
+    private String estadoParaMostrar(String estadoOriginal) {
+        String estado = normalizarEstado(estadoOriginal);
+        return switch (estado) {
+            case "EN_VENTA" -> "En venta";
+            case "EN_EXHIBICION" -> "En exhibicion";
+            case "RESERVADA" -> "Reservada";
+            case "VENDIDA" -> "Vendida";
+            default -> estadoOriginal;
+        };
     }
 }

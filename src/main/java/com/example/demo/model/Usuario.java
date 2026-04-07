@@ -15,7 +15,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "Usuario")
+@Table(name = "usuario")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @EqualsAndHashCode(callSuper = false, exclude = {"categoriasUsuarios"})
 public class Usuario {
@@ -48,6 +48,9 @@ public class Usuario {
 
     @Column(name = "redes_sociales", columnDefinition = "TEXT")
     private String redesSociales;
+
+    @Column(name = "ubicacion", length = 150)
+    private String ubicacion;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     @Column(name = "fecha_nacimiento", nullable = false)

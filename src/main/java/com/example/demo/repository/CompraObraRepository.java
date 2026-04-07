@@ -12,6 +12,8 @@ public interface CompraObraRepository extends JpaRepository<CompraObra, Integer>
 
     Optional<CompraObra> findByPaypalOrderId(String paypalOrderId);
 
+    boolean existsBySolicitudIdSolicitud(Integer idSolicitud);
+
     @Query("""
             SELECT co
             FROM CompraObra co

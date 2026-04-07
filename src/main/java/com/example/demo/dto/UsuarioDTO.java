@@ -18,6 +18,7 @@ public class UsuarioDTO {
     private String fotoPerfil;
     private String telefono;
     private String redesSociales;
+    private String ubicacion;
     private LocalDate fechaNacimiento;
     private String rol;
     private Integer likes;

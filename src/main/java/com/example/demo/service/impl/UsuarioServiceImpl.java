@@ -1,27 +1,35 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.UsuarioDTO;
+import com.example.demo.exception.BusinessException;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
-import com.example.demo.repository.*;
+import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.CategoriaUsuariosRepository;
+import com.example.demo.repository.ObraRepository;
+import com.example.demo.repository.ServicioRepository;
+import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.UsuarioService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @Transactional
 public class UsuarioServiceImpl implements UsuarioService {
 
     private static final Set<String> ROLES_VALIDOS = Set.of("USER", "ADMIN", "MODERADOR");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+\\-()\\s]{8,20}$");
+    private static final int CATEGORIA_USUARIO_MIN = 19;
+    private static final int CATEGORIA_USUARIO_MAX = 37;
 
     @Autowired
     private UsuarioRepository repo;
@@ -32,31 +40,29 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Autowired
     private CategoriaUsuariosRepository categoriaUsuariosRepository;
 
-    // si los tienes:
     @Autowired
     private ObraRepository obraRepository;
 
     @Autowired
     private ServicioRepository servicioRepository;
 
-
-    // Guardar usuario simple
     @Override
     public Usuario guardarUsuario(Usuario u) {
+        validarTelefono(u.getTelefono());
         return repo.save(u);
     }
 
-    // Crear usuario y asignar categoría si viene en DTO
     @Override
     public Usuario crearUsuarioConCategoria(UsuarioDTO dto) {
+        validarTelefono(dto.getTelefono());
         Usuario usuario = convertirAEntidad(dto);
         Usuario guardado = repo.save(usuario);
 
-        if (dto.getIdCategoria() != null) {
-            // Validar que no tenga otra categoría
+        if (dto.getIdCategoria() != null && dto.getIdCategoria() > 0) {
+            validarCategoriaUsuario(dto.getIdCategoria());
             if (guardado.getCategoriasUsuarios() == null || guardado.getCategoriasUsuarios().isEmpty()) {
                 Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
-                        .orElseThrow(() -> new RuntimeException("Categoría no encontrada"));
+                        .orElseThrow(() -> new RuntimeException("Categoria no encontrada"));
 
                 CategoriaUsuarios cu = new CategoriaUsuarios();
                 CategoriaUsuariosID id = new CategoriaUsuariosID(guardado.getIdUsuario(), categoria.getIdCategoria());
@@ -72,13 +78,11 @@ public class UsuarioServiceImpl implements UsuarioService {
         return guardado;
     }
 
-    // Listar todos los usuarios con categorías (para módulo artistas)
     @Override
     public List<Usuario> todosUsuarios() {
         return repo.findAllConCategorias();
     }
 
-    // Buscar usuario por id con categorías
     @Override
     public Optional<Usuario> buscarPorId(Integer id) {
         return repo.findByIdConCategorias(id);
@@ -95,8 +99,9 @@ public class UsuarioServiceImpl implements UsuarioService {
             u.setFotoPerfil(datos.getFotoPerfil());
             u.setTelefono(datos.getTelefono());
             u.setRedesSociales(datos.getRedesSociales());
+            u.setUbicacion(datos.getUbicacion());
             u.setFechaNacimiento(datos.getFechaNacimiento());
-            u.setRol(datos.getRol() == null || datos.getRol().isBlank() ? "USER" : datos.getRol());
+            validarTelefono(u.getTelefono());
             return repo.save(u);
         });
     }
@@ -117,9 +122,6 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         return true;
     }
-
-
-
 
     @Override
     public Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto) {
@@ -144,7 +146,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         String rolNormalizado = nuevoRol == null ? "" : nuevoRol.trim().toUpperCase();
         if (!ROLES_VALIDOS.contains(rolNormalizado)) {
-            throw new IllegalArgumentException("Rol inválido. Valores permitidos: USER, ADMIN, MODERADOR");
+            throw new IllegalArgumentException("Rol invalido. Valores permitidos: USER, ADMIN, MODERADOR");
         }
 
         return repo.findById(id).map(usuario -> {
@@ -153,7 +155,6 @@ public class UsuarioServiceImpl implements UsuarioService {
         });
     }
 
-
     @Override
     public Usuario actualizarUsuarioConCategoria(Integer id, UsuarioDTO dto) {
 
@@ -161,17 +162,18 @@ public class UsuarioServiceImpl implements UsuarioService {
                 .orElseThrow(() -> new java.util.NoSuchElementException("Usuario no encontrado con ID: " + id));
 
         usuario = convertirAEntidad(dto, usuario);
+        validarTelefono(usuario.getTelefono());
 
-        if (usuario.getCategoriasUsuarios() == null) {
-            usuario.setCategoriasUsuarios(new HashSet<>());
-        }
-        usuario.getCategoriasUsuarios().clear();
-        categoriaUsuariosRepository.deleteByUsuarioId(id);
+        if (dto.getIdCategoria() != null && dto.getIdCategoria() > 0) {
+            validarCategoriaUsuario(dto.getIdCategoria());
+            if (usuario.getCategoriasUsuarios() == null) {
+                usuario.setCategoriasUsuarios(new HashSet<>());
+            }
+            usuario.getCategoriasUsuarios().clear();
+            categoriaUsuariosRepository.deleteByUsuarioId(id);
 
-
-        if (dto.getIdCategoria() != null) {
             Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
-                    .orElseThrow(() -> new java.util.NoSuchElementException("Categoría no encontrada con ID: " + dto.getIdCategoria()));
+                    .orElseThrow(() -> new java.util.NoSuchElementException("Categoria no encontrada con ID: " + dto.getIdCategoria()));
 
             CategoriaUsuarios cu = new CategoriaUsuarios();
             CategoriaUsuariosID cuId = new CategoriaUsuariosID(usuario.getIdUsuario(), categoria.getIdCategoria());
@@ -181,20 +183,34 @@ public class UsuarioServiceImpl implements UsuarioService {
             cu.setCategoria(categoria);
 
             categoriaUsuariosRepository.save(cu);
-
             usuario.getCategoriasUsuarios().add(cu);
         }
+
         return repo.save(usuario);
+    }
+
+    private void validarTelefono(String telefono) {
+        if (telefono == null || telefono.isBlank()) {
+            return;
+        }
+        if (!PHONE_PATTERN.matcher(telefono).matches()) {
+            throw new BusinessException("Telefono invalido. Debe tener entre 8 y 20 caracteres y solo numeros/simbolos telefonicos.");
+        }
+    }
+
+    private void validarCategoriaUsuario(Integer idCategoria) {
+        if (idCategoria < CATEGORIA_USUARIO_MIN || idCategoria > CATEGORIA_USUARIO_MAX) {
+            throw new BusinessException("La categoria de usuario debe estar entre 19 y 37.");
+        }
     }
 
     @Override
     public List<Usuario> listarAdmins() {
-        return repo.findAdmins(); // solo admins
+        return repo.findAdmins();
     }
 
     private Usuario convertirAEntidad(UsuarioDTO dto) {
         Usuario u = new Usuario();
-        // No se setea el ID si es nuevo (o puede ser null, dependerá de tu DB)
         u.setIdUsuario(dto.getIdUsuario());
         u.setNombreCompleto(dto.getNombreCompleto());
         u.setUsuario(dto.getUsuario());
@@ -204,8 +220,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setFotoPerfil(dto.getFotoPerfil());
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
+        u.setUbicacion(dto.getUbicacion());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
+        u.setRol("USER");
         return u;
     }
 
@@ -222,8 +239,11 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setFotoPerfil(dto.getFotoPerfil());
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
+        u.setUbicacion(dto.getUbicacion());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
+        u.setRol(usuarioExistente != null && usuarioExistente.getRol() != null
+                ? usuarioExistente.getRol()
+                : "USER");
 
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());

@@ -2,22 +2,19 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.CapturarOrdenPaypalResponseDTO;
 import com.example.demo.dto.CrearOrdenPaypalResponseDTO;
-import com.example.demo.model.CompraObra;
-import com.example.demo.model.Obra;
-import com.example.demo.model.Usuario;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.model.*;
 import com.example.demo.repository.CarritoRepository;
-import com.example.demo.repository.CompraCarritoDetalleRepository;
 import com.example.demo.repository.CompraObraRepository;
 import com.example.demo.repository.ObraRepository;
-import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalPagoService;
 import com.paypal.core.PayPalHttpClient;
 import com.paypal.http.HttpResponse;
 import com.paypal.orders.*;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,47 +23,32 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class PaypalPagoServiceImpl implements PaypalPagoService {
 
-    private static final Logger log = LoggerFactory.getLogger(PaypalPagoServiceImpl.class);
     private static final String ESTADO_CREADA = "CREADA";
     private static final String ESTADO_CAPTURADA = "CAPTURADA";
     private static final String ESTADO_ERROR = "ERROR";
-    private static final String ESTADO_EN_VENTA = "En venta";
     private static final String MONEDA = "MXN";
 
     private final PayPalHttpClient payPalHttpClient;
     private final CarritoRepository carritoRepository;
-    private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
     private final CompraObraRepository compraObraRepository;
     private final ObraRepository obraRepository;
-    private final UsuarioRepository usuarioRepository;
     private final ObraService obraService;
+    private final NotificacionService notificacionService;
 
     @Override
     public CrearOrdenPaypalResponseDTO crearOrdenParaObra(Integer idObra, Integer compradorId) {
-        Obra obra = obraRepository.findById(idObra)
-                .orElseThrow(() -> new RuntimeException("Obra no encontrada con ID: " + idObra));
+        Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(compradorId, idObra)
+                .orElseThrow(() -> new BusinessException("La obra no está reservada para este comprador"));
 
-        Usuario comprador = usuarioRepository.findById(compradorId)
-                .orElseThrow(() -> new RuntimeException("Comprador no encontrado con ID: " + compradorId));
+        Obra obra = carrito.getObra();
+        SolicitudCompraObra solicitud = carrito.getSolicitud();
 
-        Usuario vendedor = obra.getUsuario();
-        if (vendedor == null) {
-            throw new IllegalStateException("La obra no tiene vendedor asociado");
-        }
-
-        if (Objects.equals(vendedor.getIdUsuario(), comprador.getIdUsuario())) {
-            throw new IllegalArgumentException("No puedes comprar tu propia obra");
-        }
-
-        if (!estaObraComprable(obra)) {
-            throw new IllegalStateException("La obra ya fue comprada previamente");
-        }
+        validarFlujoReserva(obra, solicitud, compradorId, carrito.getReservadaHasta());
 
         BigDecimal monto = obtenerMontoDesdeObra(obra);
 
@@ -80,8 +62,9 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
 
             CompraObra compra = CompraObra.builder()
                     .obra(obra)
-                    .comprador(comprador)
-                    .vendedor(vendedor)
+                    .comprador(solicitud.getComprador())
+                    .vendedor(solicitud.getVendedor())
+                    .solicitud(solicitud)
                     .monto(monto)
                     .moneda(MONEDA)
                     .estado(ESTADO_CREADA)
@@ -101,7 +84,6 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
                     .build();
 
         } catch (IOException e) {
-            log.error("Error al crear la orden PayPal para la obra {} y comprador {}", idObra, compradorId, e);
             throw new RuntimeException("Error al crear la orden en PayPal", e);
         }
     }
@@ -110,20 +92,18 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     @Transactional
     public CapturarOrdenPaypalResponseDTO capturarOrden(String paypalOrderId) {
         CompraObra compra = compraObraRepository.findByPaypalOrderId(paypalOrderId)
-                .orElseThrow(() -> new RuntimeException("No existe una compra registrada para la orden PayPal: " + paypalOrderId));
+                .orElseThrow(() -> new ResourceNotFoundException("No existe compra para esa orden PayPal"));
 
         if (ESTADO_CAPTURADA.equalsIgnoreCase(compra.getEstado())) {
-            throw new IllegalStateException("La orden ya fue capturada previamente");
+            throw new BusinessException("La orden ya fue capturada");
         }
 
-        if (compra.getPaypalCaptureId() != null && !compra.getPaypalCaptureId().isBlank()) {
-            throw new IllegalStateException("La compra ya tiene un paypalCaptureId registrado");
-        }
+        Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(
+                        compra.getComprador().getIdUsuario(),
+                        compra.getObra().getIdObra())
+                .orElseThrow(() -> new BusinessException("La reserva ya no está activa"));
 
-        Integer idObra = compra.getObra().getIdObra();
-        if (!estaObraComprable(compra.getObra())) {
-            throw new IllegalStateException("La obra ya tiene una compra capturada");
-        }
+        validarFlujoReserva(compra.getObra(), compra.getSolicitud(), compra.getComprador().getIdUsuario(), carrito.getReservadaHasta());
 
         try {
             OrdersCaptureRequest request = new OrdersCaptureRequest(paypalOrderId);
@@ -135,27 +115,34 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             if (!"COMPLETED".equalsIgnoreCase(order.status())) {
                 compra.setEstado(ESTADO_ERROR);
                 compraObraRepository.save(compra);
-                throw new IllegalStateException("La captura en PayPal no fue completada. Estado actual: " + order.status());
+                throw new BusinessException("La captura en PayPal no fue completada: " + order.status());
             }
 
             String captureId = extraerCaptureId(order);
-            if (captureId == null || captureId.isBlank()) {
-                compra.setEstado(ESTADO_ERROR);
-                compraObraRepository.save(compra);
-                throw new IllegalStateException("PayPal no devolvio un captureId para la orden capturada");
-            }
-
             compra.setPaypalCaptureId(captureId);
             compra.setEstado(ESTADO_CAPTURADA);
             compra.setFechaCaptura(LocalDateTime.now());
             compraObraRepository.save(compra);
 
-            obraService.marcarComoVendida(idObra);
-            carritoRepository.eliminarTodosPorObra(idObra);
+            compra.getSolicitud().setEstadoSolicitud("PAGADA");
+            compra.getSolicitud().setFechaRespuesta(LocalDateTime.now());
+
+            obraService.marcarComoVendida(compra.getObra().getIdObra());
+            carritoRepository.delete(carrito);
+
+            notificacionService.crearNotificacionUsuario(
+                    compra.getVendedor().getIdUsuario(),
+                    compra.getComprador().getIdUsuario(),
+                    "OBRA_VENDIDA",
+                    "Obra vendida",
+                    "Tu obra '" + compra.getObra().getTitulo() + "' fue pagada correctamente.",
+                    "OBRA",
+                    compra.getObra().getIdObra()
+            );
 
             return CapturarOrdenPaypalResponseDTO.builder()
                     .idCompra(compra.getIdCompra())
-                    .idObra(idObra)
+                    .idObra(compra.getObra().getIdObra())
                     .paypalOrderId(paypalOrderId)
                     .paypalCaptureId(captureId)
                     .status(ESTADO_CAPTURADA)
@@ -165,8 +152,25 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         } catch (IOException e) {
             compra.setEstado(ESTADO_ERROR);
             compraObraRepository.save(compra);
-            log.error("Error al capturar la orden PayPal {}", paypalOrderId, e);
             throw new RuntimeException("Error al capturar la orden en PayPal", e);
+        }
+    }
+
+    private void validarFlujoReserva(Obra obra, SolicitudCompraObra solicitud, Integer compradorId, LocalDateTime reservadaHasta) {
+        if (obra == null || solicitud == null) {
+            throw new BusinessException("Reserva inválida");
+        }
+        if (!"RESERVADA".equalsIgnoreCase(obra.getEstado())) {
+            throw new BusinessException("La obra debe estar reservada para pagar");
+        }
+        if (!"ACEPTADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
+            throw new BusinessException("La solicitud debe estar aceptada");
+        }
+        if (!compradorId.equals(solicitud.getComprador().getIdUsuario())) {
+            throw new BusinessException("El comprador no coincide con la reserva");
+        }
+        if (reservadaHasta != null && reservadaHasta.isBefore(LocalDateTime.now())) {
+            throw new BusinessException("La reserva ya expiró");
         }
     }
 
@@ -215,28 +219,14 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         return capture.id();
     }
 
-    private boolean estaObraComprable(Obra obra) {
-        if (obra == null || obra.getIdObra() == null) {
-            return false;
-        }
-
-        String estado = obra.getEstado() != null ? obra.getEstado().trim() : "";
-        if (!ESTADO_EN_VENTA.equalsIgnoreCase(estado)) {
-            return false;
-        }
-
-        return !compraObraRepository.existsByObraIdObraAndEstado(obra.getIdObra(), ESTADO_CAPTURADA)
-                && !compraCarritoDetalleRepository.existsByObraIdObraAndCompraCarritoEstado(obra.getIdObra(), ESTADO_CAPTURADA);
-    }
-
     private BigDecimal obtenerMontoDesdeObra(Obra obra) {
         if (obra.getPrecio() == null) {
-            throw new IllegalStateException("La obra no tiene precio configurado");
+            throw new BusinessException("La obra no tiene precio configurado");
         }
 
-        BigDecimal monto = BigDecimal.valueOf(obra.getPrecio()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal monto = obra.getPrecio().setScale(2, RoundingMode.HALF_UP);
         if (monto.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("La obra debe tener un precio mayor que cero");
+            throw new BusinessException("La obra debe tener un precio mayor a cero");
         }
 
         return monto;

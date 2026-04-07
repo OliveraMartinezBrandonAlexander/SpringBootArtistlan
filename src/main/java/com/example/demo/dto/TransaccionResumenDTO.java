@@ -22,6 +22,10 @@ public class TransaccionResumenDTO {
     private String nombreArtista;
     private String nombreComprador;
     private String nombreVendedor;
+    private Integer idComprador;
+    private Integer idVendedor;
+    private String fotoComprador;
+    private String fotoVendedor;
     private LocalDateTime fechaTransaccion;
     private BigDecimal precio;
     private String moneda;

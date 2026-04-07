@@ -203,6 +203,7 @@ public class UsuarioController {
                 .fotoPerfil(u.getFotoPerfil())
                 .telefono(u.getTelefono())
                 .redesSociales(u.getRedesSociales())
+                .ubicacion(u.getUbicacion())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .rol(u.getRol())
                 .likes(favoritosService.likesPorArtista(u.getIdUsuario().longValue()))
@@ -241,8 +242,11 @@ public class UsuarioController {
         u.setFotoPerfil(dto.getFotoPerfil());
         u.setTelefono(dto.getTelefono());
         u.setRedesSociales(dto.getRedesSociales());
+        u.setUbicacion(dto.getUbicacion());
         u.setFechaNacimiento(dto.getFechaNacimiento());
-        u.setRol(dto.getRol() == null || dto.getRol().isBlank() ? "USER" : dto.getRol());
+        u.setRol(usuarioExistente != null && usuarioExistente.getRol() != null
+                ? usuarioExistente.getRol()
+                : "USER");
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());
         }

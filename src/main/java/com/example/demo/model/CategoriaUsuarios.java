@@ -19,11 +19,11 @@ public class CategoriaUsuarios {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("idUsuario")
-    @JoinColumn(name = "ID_USUARIO")
+    @JoinColumn(name = "id_usuario")
     private Usuario usuario;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("idCategoria")
-    @JoinColumn(name = "ID_CATEGORIA")
+    @JoinColumn(name = "id_categoria")
     private Categoria categoria;
 }

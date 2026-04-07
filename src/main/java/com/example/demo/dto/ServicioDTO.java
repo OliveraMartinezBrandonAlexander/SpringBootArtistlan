@@ -1,7 +1,8 @@
 package com.example.demo.dto;
-import com.example.demo.model.CategoriaServicios;
-import com.example.demo.model.Servicio;
+
 import lombok.*;
+
+import java.math.BigDecimal;
 
 @Data
 @Builder
@@ -12,8 +13,11 @@ public class ServicioDTO {
     private Integer idServicio;
     private String titulo;
     private String descripcion;
+    private String tipoContacto;
     private String contacto;
     private String tecnicas;
+    private BigDecimal precioMin;
+    private BigDecimal precioMax;
     private Integer likes;
     private Boolean esFavorito;
 
@@ -23,23 +27,4 @@ public class ServicioDTO {
     private Integer idCategoria;
     private String categoria;
     private String fotoPerfilAutor;
-
-    public ServicioDTO(Servicio s) {
-        this.idServicio = s.getIdServicio();
-        this.titulo = s.getTitulo();
-        this.descripcion = s.getDescripcion();
-        this.contacto = s.getContacto();
-        this.tecnicas = s.getTecnicas();
-        this.idUsuario = s.getUsuario().getIdUsuario();
-        this.nombreUsuario = s.getUsuario().getUsuario();
-        this.fotoPerfilAutor = s.getUsuario().getFotoPerfil();
-
-        if (s.getCategoriasServicios() != null && !s.getCategoriasServicios().isEmpty()) {
-            CategoriaServicios cs = s.getCategoriasServicios().iterator().next();
-            if (cs.getCategoria() != null) {
-                this.idCategoria = cs.getCategoria().getIdCategoria();
-                this.categoria = cs.getCategoria().getNombreCategoria();
-            }
-        }
-    }
 }

@@ -65,6 +65,7 @@ public class UsuariosUsuarioController {
                 .fotoPerfil(u.getFotoPerfil())
                 .telefono(u.getTelefono())
                 .redesSociales(u.getRedesSociales())
+                .ubicacion(u.getUbicacion())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .build();
     }

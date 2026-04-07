@@ -21,7 +21,6 @@ public class ServiciosPortafolioPersonalController {
     private final ServicioService servicioService;
     private final UsuarioService usuarioService;
 
-    // GET: Obtener todos los servicios de un usuario
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<ServicioDTO>> obtenerServiciosPorUsuario(@PathVariable Integer usuarioId) {
 
@@ -36,7 +35,6 @@ public class ServiciosPortafolioPersonalController {
         return new ResponseEntity<>(servicios, HttpStatus.OK);
     }
 
-    // POST: Crear un nuevo servicio para un usuario (recibe DTO desde Android)
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ServicioDTO> crearServicio(@PathVariable Integer usuarioId,
                                                      @RequestBody ServicioDTO servicioDTO) {
@@ -53,7 +51,6 @@ public class ServiciosPortafolioPersonalController {
         }
     }
 
-    // PUT: Actualizar un servicio del usuario dueño
     @PutMapping("/{usuarioId}/{idServicio}")
     public ResponseEntity<ServicioDTO> actualizarServicio(@PathVariable Integer usuarioId,
                                                           @PathVariable Integer idServicio,
@@ -71,7 +68,6 @@ public class ServiciosPortafolioPersonalController {
         }
     }
 
-    // DELETE: Eliminar un servicio del usuario dueño
     @DeleteMapping("/{usuarioId}/{idServicio}")
     public ResponseEntity<Void> eliminarServicio(@PathVariable Integer usuarioId,
                                                  @PathVariable Integer idServicio) {
@@ -105,8 +101,11 @@ public class ServiciosPortafolioPersonalController {
                 .idServicio(s.getIdServicio())
                 .titulo(s.getTitulo())
                 .descripcion(s.getDescripcion())
+                .tipoContacto(s.getTipoContacto())
                 .contacto(s.getContacto())
                 .tecnicas(s.getTecnicas())
+                .precioMin(s.getPrecioMin())
+                .precioMax(s.getPrecioMax())
                 .idUsuario(
                         s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null
                 )

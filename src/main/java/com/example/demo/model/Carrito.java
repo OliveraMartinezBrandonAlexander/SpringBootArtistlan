@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
 @Table(
         name = "carrito",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uq_carrito_usuario_obra", columnNames = {"id_usuario", "id_obra"})
+                @UniqueConstraint(name = "uq_carrito_usuario_obra", columnNames = {"id_usuario", "id_obra"}),
+                @UniqueConstraint(name = "uq_carrito_obra", columnNames = {"id_obra"}),
+                @UniqueConstraint(name = "uq_carrito_solicitud", columnNames = {"id_solicitud"})
         }
 )
 @Getter
@@ -32,8 +34,15 @@ public class Carrito {
     @JoinColumn(name = "id_obra", nullable = false)
     private Obra obra;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_solicitud", nullable = false)
+    private SolicitudCompraObra solicitud;
+
     @Column(name = "fecha_agregado", nullable = false, updatable = false)
     private LocalDateTime fechaAgregado;
+
+    @Column(name = "reservada_hasta", nullable = false)
+    private LocalDateTime reservadaHasta;
 
     @PrePersist
     public void prePersist() {
