@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.dto.CarritoContactoDTO;
 import com.example.demo.dto.CarritoDTO;
 import com.example.demo.dto.CarritoRequestDTO;
 import com.example.demo.dto.CarritoTotalDTO;
@@ -29,6 +30,12 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class CarritoServiceImpl implements CarritoService {
+
+    private static final String ESTADO_EN_VENTA = "EN_VENTA";
+    private static final String ESTADO_RESERVADA = "RESERVADA";
+    private static final String ESTADO_ACEPTADA = "ACEPTADA";
+    private static final String ESTADO_CANCELADA = "CANCELADA";
+    private static final String ESTADO_EXPIRADA = "EXPIRADA";
 
     private final CarritoRepository carritoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -67,28 +74,30 @@ public class CarritoServiceImpl implements CarritoService {
 
     @Override
     @Transactional
+    public List<CarritoDTO> listarObrasEnCarrito(Integer idUsuario) {
+        return obtenerCarritoUsuario(idUsuario);
+    }
+
+    @Override
+    @Transactional
     public void eliminarDelCarrito(CarritoRequestDTO request) {
         if (request == null || request.getIdUsuario() == null || request.getIdObra() == null) {
             throw new BusinessException("idUsuario e idObra son obligatorios");
         }
 
-        Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(request.getIdUsuario(), request.getIdObra())
-                .orElseThrow(() -> new ResourceNotFoundException("La obra no está en el carrito del usuario"));
+        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(request.getIdUsuario(), request.getIdObra())
+                .orElseThrow(() -> new ResourceNotFoundException("La obra no esta en el carrito del usuario"));
 
-        SolicitudCompraObra solicitud = carrito.getSolicitud();
-        Obra obra = carrito.getObra();
+        cancelarReservaPorEliminacionDeCarrito(carrito);
+    }
 
-        carritoRepository.delete(carrito);
-
-        if (solicitud != null && "ACEPTADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
-            solicitud.setEstadoSolicitud("CANCELADA");
-            solicitud.setFechaRespuesta(LocalDateTime.now());
-            solicitudRepository.save(solicitud);
-        }
-
-        if (obra != null && "RESERVADA".equalsIgnoreCase(obra.getEstado())) {
-            obra.setEstado("EN_VENTA");
-            obraRepository.save(obra);
+    @Override
+    @Transactional
+    public void limpiarCarritoUsuario(Integer idUsuario) {
+        validarUsuario(idUsuario);
+        List<Carrito> items = carritoRepository.findByUsuarioId(idUsuario);
+        for (Carrito item : items) {
+            cancelarReservaPorEliminacionDeCarrito(item);
         }
     }
 
@@ -104,6 +113,36 @@ public class CarritoServiceImpl implements CarritoService {
         return CarritoTotalDTO.builder()
                 .cantidad(items.size())
                 .total(total)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CarritoContactoDTO obtenerContactoVendedor(Integer idUsuario, Integer idObra) {
+        validarUsuario(idUsuario);
+        if (idObra == null) {
+            throw new BusinessException("idObra es obligatorio");
+        }
+
+        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(idUsuario, idObra)
+                .orElseThrow(() -> new ResourceNotFoundException("La obra no esta en el carrito del usuario"));
+
+        Obra obra = carrito.getObra();
+        if (obra == null || obra.getUsuario() == null) {
+            throw new ResourceNotFoundException("No se encontro informacion de contacto del vendedor");
+        }
+
+        Usuario vendedor = obra.getUsuario();
+        return CarritoContactoDTO.builder()
+                .idUsuarioComprador(idUsuario)
+                .idObra(idObra)
+                .idVendedor(vendedor.getIdUsuario())
+                .nombreVendedor(vendedor.getNombreCompleto())
+                .usuarioVendedor(vendedor.getUsuario())
+                .correoVendedor(vendedor.getCorreo())
+                .telefonoVendedor(vendedor.getTelefono())
+                .redesVendedor(vendedor.getRedesSociales())
+                .fotoPerfilVendedor(vendedor.getFotoPerfil())
                 .build();
     }
 
@@ -127,8 +166,8 @@ public class CarritoServiceImpl implements CarritoService {
         if (item.getObra() == null || item.getSolicitud() == null) {
             return false;
         }
-        boolean obraReservada = "RESERVADA".equalsIgnoreCase(item.getObra().getEstado());
-        boolean solicitudAceptada = "ACEPTADA".equalsIgnoreCase(item.getSolicitud().getEstadoSolicitud());
+        boolean obraReservada = ESTADO_RESERVADA.equalsIgnoreCase(item.getObra().getEstado());
+        boolean solicitudAceptada = ESTADO_ACEPTADA.equalsIgnoreCase(item.getSolicitud().getEstadoSolicitud());
         return obraReservada && solicitudAceptada;
     }
 
@@ -136,34 +175,103 @@ public class CarritoServiceImpl implements CarritoService {
         SolicitudCompraObra solicitud = carrito.getSolicitud();
         Obra obra = carrito.getObra();
 
-        if (solicitud != null && "ACEPTADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
-            solicitud.setEstadoSolicitud("EXPIRADA");
+        if (solicitud != null && ESTADO_ACEPTADA.equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
+            solicitud.setEstadoSolicitud(ESTADO_EXPIRADA);
             solicitud.setFechaRespuesta(LocalDateTime.now());
             solicitudRepository.save(solicitud);
         }
 
-        if (obra != null && "RESERVADA".equalsIgnoreCase(obra.getEstado())) {
-            obra.setEstado("EN_VENTA");
+        if (obra != null && ESTADO_RESERVADA.equalsIgnoreCase(obra.getEstado())) {
+            obra.setEstado(ESTADO_EN_VENTA);
             obraRepository.save(obra);
         }
+
+        notificarReservaExpirada(carrito);
+        carritoRepository.delete(carrito);
+    }
+
+    private void cancelarReservaPorEliminacionDeCarrito(Carrito carrito) {
+        SolicitudCompraObra solicitud = carrito.getSolicitud();
+        Obra obra = carrito.getObra();
+
+        if (solicitud != null && ESTADO_ACEPTADA.equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
+            solicitud.setEstadoSolicitud(ESTADO_CANCELADA);
+            solicitud.setFechaRespuesta(LocalDateTime.now());
+            solicitud.setMotivoRechazo("Cancelada por comprador desde carrito");
+            solicitudRepository.save(solicitud);
+        }
+
+        if (obra != null && ESTADO_RESERVADA.equalsIgnoreCase(obra.getEstado())) {
+            obra.setEstado(ESTADO_EN_VENTA);
+            obraRepository.save(obra);
+        }
+
+        notificarCancelacionDesdeCarrito(carrito);
+        carritoRepository.delete(carrito);
+    }
+
+    private void notificarReservaExpirada(Carrito carrito) {
+        if (carrito.getObra() == null || carrito.getUsuario() == null) {
+            return;
+        }
+
+        Obra obra = carrito.getObra();
+        String tituloObra = obra.getTitulo() != null ? obra.getTitulo() : "la obra";
 
         notificacionService.crearNotificacionSistema(
                 carrito.getUsuario().getIdUsuario(),
                 "RESERVA_EXPIRADA",
                 "Reserva expirada",
-                "La reserva de la obra '" + carrito.getObra().getTitulo() + "' expiró.",
-                "OBRA",
-                carrito.getObra().getIdObra()
+                "La reserva de '" + tituloObra + "' expiro y la obra volvio a En venta.",
+                null,
+                null
         );
 
-        carritoRepository.delete(carrito);
+        if (obra.getUsuario() != null) {
+            notificacionService.crearNotificacionSistema(
+                    obra.getUsuario().getIdUsuario(),
+                    "RESERVA_LIBERADA",
+                    "Reserva liberada",
+                    "La reserva de '" + tituloObra + "' expiro y la obra volvio a En venta.",
+                    "OBRA",
+                    obra.getIdObra()
+            );
+        }
+    }
+
+    private void notificarCancelacionDesdeCarrito(Carrito carrito) {
+        if (carrito.getObra() == null || carrito.getUsuario() == null) {
+            return;
+        }
+        Obra obra = carrito.getObra();
+        String tituloObra = obra.getTitulo() != null ? obra.getTitulo() : "la obra";
+
+        notificacionService.crearNotificacionSistema(
+                carrito.getUsuario().getIdUsuario(),
+                "SOLICITUD_CANCELADA",
+                "Solicitud cancelada",
+                "Quitaste '" + tituloObra + "' del carrito. La reserva fue liberada.",
+                null,
+                null
+        );
+
+        if (obra.getUsuario() != null) {
+            notificacionService.crearNotificacionSistema(
+                    obra.getUsuario().getIdUsuario(),
+                    "RESERVA_LIBERADA",
+                    "Reserva liberada",
+                    "El comprador libero la reserva de '" + tituloObra + "' al quitarla del carrito.",
+                    "OBRA",
+                    obra.getIdObra()
+            );
+        }
     }
 
     private void validarUsuario(Integer idUsuario) {
         Usuario usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado: " + idUsuario));
         if (usuario.getIdUsuario() == null) {
-            throw new ResourceNotFoundException("Usuario inválido");
+            throw new ResourceNotFoundException("Usuario invalido");
         }
     }
 
@@ -202,7 +310,7 @@ public class CarritoServiceImpl implements CarritoService {
 
         return switch (estado) {
             case "EN_VENTA" -> "En venta";
-            case "EN_EXHIBICION" -> "En exhibicion";
+            case "EN_EXHIBICION" -> "En exhibici\u00F3n";
             case "RESERVADA" -> "Reservada";
             case "VENDIDA" -> "Vendida";
             default -> estadoOriginal;

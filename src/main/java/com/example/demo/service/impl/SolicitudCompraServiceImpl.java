@@ -12,6 +12,7 @@ import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.SolicitudCompraObraRepository;
 import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.CarritoService;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.SolicitudCompraService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
     private final CarritoRepository carritoRepository;
+    private final CarritoService carritoService;
     private final NotificacionService notificacionService;
 
     @Override
@@ -146,12 +148,23 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         obraRepository.save(obra);
         solicitudRepository.save(solicitud);
 
-        carritoRepository.save(Carrito.builder()
-                .usuario(solicitud.getComprador())
-                .obra(obra)
-                .solicitud(solicitud)
-                .reservadaHasta(expiracion)
-                .build());
+        Carrito carritoExistente = carritoRepository.findByObraIdObra(obra.getIdObra()).orElse(null);
+        if (carritoExistente != null && !carritoExistente.getUsuario().getIdUsuario().equals(solicitud.getComprador().getIdUsuario())) {
+            throw new BusinessException("La obra ya tiene una reserva activa en carrito");
+        }
+
+        if (carritoExistente != null) {
+            carritoExistente.setSolicitud(solicitud);
+            carritoExistente.setReservadaHasta(expiracion);
+            carritoRepository.save(carritoExistente);
+        } else {
+            carritoRepository.save(Carrito.builder()
+                    .usuario(solicitud.getComprador())
+                    .obra(obra)
+                    .solicitud(solicitud)
+                    .reservadaHasta(expiracion)
+                    .build());
+        }
 
         solicitudRepository.cerrarPendientesDeObra(
                 obra.getIdObra(),
@@ -172,8 +185,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                     "SOLICITUD_CANCELADA",
                     "Solicitud cancelada",
                     "Tu solicitud para '" + obra.getTitulo() + "' fue cancelada porque se acepto otra solicitud.",
-                    "SOLICITUD",
-                    pendiente.getIdSolicitud()
+                    null,
+                    null
             );
         }
 
@@ -183,8 +196,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 "SOLICITUD_ACEPTADA",
                 "Solicitud aceptada",
                 "Tu solicitud para '" + obra.getTitulo() + "' fue aceptada. Tienes 7 dias para completar el pago.",
-                "SOLICITUD",
-                solicitud.getIdSolicitud()
+                null,
+                null
         );
 
         return toDto(solicitud);
@@ -244,6 +257,28 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
             obraRepository.save(solicitud.getObra());
         }
 
+        String tituloObra = solicitud.getObra() != null ? solicitud.getObra().getTitulo() : "la obra";
+        notificacionService.crearNotificacionSistema(
+                idComprador,
+                "SOLICITUD_CANCELADA",
+                "Solicitud cancelada",
+                "Cancelaste tu solicitud para '" + tituloObra + "'.",
+                null,
+                null
+        );
+
+        if (solicitud.getVendedor() != null) {
+            notificacionService.crearNotificacionUsuario(
+                    solicitud.getVendedor().getIdUsuario(),
+                    idComprador,
+                    "SOLICITUD_CANCELADA",
+                    "Solicitud cancelada",
+                    "El comprador cancelo la solicitud para '" + tituloObra + "'.",
+                    null,
+                    null
+            );
+        }
+
         return toDto(solicitud);
     }
 
@@ -257,29 +292,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public int expirarReservasVencidas() {
-        List<SolicitudCompraObra> vencidas = solicitudRepository.findReservasExpiradas(LocalDateTime.now());
-        for (SolicitudCompraObra solicitud : vencidas) {
-            solicitud.setEstadoSolicitud("EXPIRADA");
-            solicitud.setFechaRespuesta(LocalDateTime.now());
-            solicitudRepository.save(solicitud);
-            Obra obra = solicitud.getObra();
-            if (obra != null && "RESERVADA".equalsIgnoreCase(obra.getEstado())) {
-                obra.setEstado("EN_VENTA");
-                obraRepository.save(obra);
-            }
-            carritoRepository.findByObraIdObra(solicitud.getObra().getIdObra()).ifPresent(carritoRepository::delete);
-
-            notificacionService.crearNotificacionSistema(
-                    solicitud.getComprador().getIdUsuario(),
-                    "RESERVA_EXPIRADA",
-                    "Reserva expirada",
-                    "La reserva de '" + solicitud.getObra().getTitulo() + "' expiro.",
-                    "SOLICITUD",
-                    solicitud.getIdSolicitud()
-            );
-        }
-
-        return vencidas.size();
+        return carritoService.limpiarReservasVencidas();
     }
 
     private SolicitudCompraObra obtenerSolicitudDetallada(Integer idSolicitud) {

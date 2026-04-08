@@ -25,6 +25,18 @@ public interface CarritoRepository extends JpaRepository<Carrito, Integer> {
 
     Optional<Carrito> findByUsuarioIdUsuarioAndObraIdObra(Integer idUsuario, Integer idObra);
 
+    @Query("""
+            SELECT c
+            FROM Carrito c
+            JOIN FETCH c.obra o
+            JOIN FETCH o.usuario
+            LEFT JOIN FETCH c.solicitud
+            WHERE c.usuario.idUsuario = :idUsuario
+              AND c.obra.idObra = :idObra
+            """)
+    Optional<Carrito> findDetalleByUsuarioYObra(@Param("idUsuario") Integer idUsuario,
+                                                @Param("idObra") Integer idObra);
+
     Optional<Carrito> findByObraIdObra(Integer idObra);
 
     boolean existsByUsuarioIdUsuarioAndObraIdObra(Integer idUsuario, Integer idObra);
@@ -52,4 +64,11 @@ public interface CarritoRepository extends JpaRepository<Carrito, Integer> {
             WHERE c.obra.idObra = :idObra
             """)
     int eliminarTodosPorObra(@Param("idObra") Integer idObra);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            DELETE FROM Carrito c
+            WHERE c.usuario.idUsuario = :idUsuario
+            """)
+    int eliminarTodosPorUsuario(@Param("idUsuario") Integer idUsuario);
 }

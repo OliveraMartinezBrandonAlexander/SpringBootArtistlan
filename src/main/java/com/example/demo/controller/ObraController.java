@@ -136,7 +136,7 @@ public class ObraController {
         String estado = normalizarEstado(estadoOriginal);
         return switch (estado) {
             case "EN_VENTA" -> "En venta";
-            case "EN_EXHIBICION" -> "En exhibicion";
+            case "EN_EXHIBICION" -> "En exhibici\u00F3n";
             case "RESERVADA" -> "Reservada";
             case "VENDIDA" -> "Vendida";
             default -> estadoOriginal;

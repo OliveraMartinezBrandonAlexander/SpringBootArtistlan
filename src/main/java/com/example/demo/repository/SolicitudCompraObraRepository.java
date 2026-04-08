@@ -81,5 +81,5 @@ public interface SolicitudCompraObraRepository extends JpaRepository<SolicitudCo
             """)
     long contarPendientesDeUsuario(@Param("usuarioId") Integer usuarioId);
 
-    long deleteByObraIdObra(Integer idObra);
+    void deleteByObraIdObra(Integer idObra);
 }
