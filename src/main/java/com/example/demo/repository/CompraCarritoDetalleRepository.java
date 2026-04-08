@@ -11,6 +11,19 @@ import java.util.List;
 public interface CompraCarritoDetalleRepository extends JpaRepository<CompraCarritoDetalle, Integer> {
 
     @Query("""
+            SELECT d
+            FROM CompraCarritoDetalle d
+            LEFT JOIN FETCH d.compraCarrito cc
+            LEFT JOIN FETCH cc.comprador
+            LEFT JOIN FETCH d.obra o
+            LEFT JOIN FETCH o.usuario
+            LEFT JOIN FETCH d.vendedor
+            LEFT JOIN FETCH d.solicitud
+            WHERE d.idDetalle = :idDetalle
+            """)
+    java.util.Optional<CompraCarritoDetalle> findByIdDetallada(@Param("idDetalle") Integer idDetalle);
+
+    @Query("""
             SELECT DISTINCT d
             FROM CompraCarritoDetalle d
             JOIN FETCH d.compraCarrito cc

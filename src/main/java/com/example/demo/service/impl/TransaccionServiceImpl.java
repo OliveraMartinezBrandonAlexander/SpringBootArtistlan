@@ -1,6 +1,9 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.dto.TransaccionDetalleDTO;
 import com.example.demo.dto.TransaccionResumenDTO;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.CompraCarrito;
 import com.example.demo.model.CompraCarritoDetalle;
 import com.example.demo.model.CompraObra;
@@ -27,6 +30,8 @@ public class TransaccionServiceImpl implements TransaccionService {
     private static final String TIPO_OBRA_DIRECTA = "OBRA_DIRECTA";
     private static final String TIPO_CARRITO = "CARRITO";
     private static final String ESTADO_TRANSACCION_COMPLETADA = "CAPTURADA";
+    private static final String ROL_COMPRA = "COMPRA";
+    private static final String ROL_VENTA = "VENTA";
 
     private final UsuarioRepository usuarioRepository;
     private final CompraObraRepository compraObraRepository;
@@ -70,6 +75,101 @@ public class TransaccionServiceImpl implements TransaccionService {
         return ordenarPorFechaDesc(transacciones);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public TransaccionDetalleDTO obtenerDetalleTransaccion(Integer idUsuario, String tipoOrigen, Integer idTransaccion) {
+        validarUsuario(idUsuario);
+        if (idTransaccion == null) {
+            throw new BusinessException("idTransaccion es obligatorio");
+        }
+
+        String tipoNormalizado = normalizarTipoOrigen(tipoOrigen);
+        return switch (tipoNormalizado) {
+            case TIPO_OBRA_DIRECTA -> obtenerDetalleCompraDirecta(idUsuario, idTransaccion);
+            case TIPO_CARRITO -> obtenerDetalleCompraCarrito(idUsuario, idTransaccion);
+            default -> throw new BusinessException("tipoOrigen invalido. Usa OBRA_DIRECTA o CARRITO");
+        };
+    }
+
+    private TransaccionDetalleDTO obtenerDetalleCompraDirecta(Integer idUsuario, Integer idTransaccion) {
+        CompraObra compraObra = compraObraRepository.findByIdDetallada(idTransaccion)
+                .orElseThrow(() -> new ResourceNotFoundException("Transaccion no encontrada"));
+
+        validarActorDeTransaccion(idUsuario, compraObra.getComprador(), compraObra.getVendedor());
+
+        Obra obra = compraObra.getObra();
+        Usuario comprador = compraObra.getComprador();
+        Usuario vendedor = compraObra.getVendedor();
+
+        return TransaccionDetalleDTO.builder()
+                .idTransaccion(compraObra.getIdCompra())
+                .tipoOrigen(TIPO_OBRA_DIRECTA)
+                .rolUsuario(definirRolUsuario(idUsuario, comprador))
+                .idCompraCarrito(null)
+                .idObra(obra != null ? obra.getIdObra() : null)
+                .idSolicitud(compraObra.getSolicitud() != null ? compraObra.getSolicitud().getIdSolicitud() : null)
+                .tituloObra(obra != null ? obra.getTitulo() : null)
+                .imagenObra(obra != null ? obra.getImagen1() : null)
+                .monto(compraObra.getMonto())
+                .moneda(compraObra.getMoneda())
+                .estadoPago(compraObra.getEstado())
+                .paypalOrderId(compraObra.getPaypalOrderId())
+                .paypalCaptureId(compraObra.getPaypalCaptureId())
+                .fechaCreacionPago(compraObra.getFechaCreacion())
+                .fechaCapturaPago(compraObra.getFechaCaptura())
+                .fechaTransaccion(obtenerFechaTransaccion(compraObra.getFechaCaptura(), compraObra.getFechaCreacion()))
+                .idComprador(comprador != null ? comprador.getIdUsuario() : null)
+                .nombreComprador(obtenerNombreUsuario(comprador))
+                .usuarioComprador(obtenerUsuarioLogin(comprador))
+                .fotoComprador(comprador != null ? comprador.getFotoPerfil() : null)
+                .idVendedor(vendedor != null ? vendedor.getIdUsuario() : null)
+                .nombreVendedor(obtenerNombreUsuario(vendedor))
+                .usuarioVendedor(obtenerUsuarioLogin(vendedor))
+                .fotoVendedor(vendedor != null ? vendedor.getFotoPerfil() : null)
+                .build();
+    }
+
+    private TransaccionDetalleDTO obtenerDetalleCompraCarrito(Integer idUsuario, Integer idTransaccion) {
+        CompraCarritoDetalle detalle = compraCarritoDetalleRepository.findByIdDetallada(idTransaccion)
+                .orElseThrow(() -> new ResourceNotFoundException("Transaccion no encontrada"));
+
+        CompraCarrito compraCarrito = detalle.getCompraCarrito();
+        Usuario comprador = compraCarrito != null ? compraCarrito.getComprador() : null;
+        Usuario vendedor = detalle.getVendedor();
+
+        validarActorDeTransaccion(idUsuario, comprador, vendedor);
+
+        Obra obra = detalle.getObra();
+        return TransaccionDetalleDTO.builder()
+                .idTransaccion(detalle.getIdDetalle())
+                .tipoOrigen(TIPO_CARRITO)
+                .rolUsuario(definirRolUsuario(idUsuario, comprador))
+                .idCompraCarrito(compraCarrito != null ? compraCarrito.getIdCompraCarrito() : null)
+                .idObra(obra != null ? obra.getIdObra() : null)
+                .idSolicitud(detalle.getSolicitud() != null ? detalle.getSolicitud().getIdSolicitud() : null)
+                .tituloObra(obra != null ? obra.getTitulo() : null)
+                .imagenObra(obra != null ? obra.getImagen1() : null)
+                .monto(detalle.getPrecioUnitario())
+                .moneda(compraCarrito != null ? compraCarrito.getMoneda() : null)
+                .estadoPago(compraCarrito != null ? compraCarrito.getEstado() : null)
+                .paypalOrderId(compraCarrito != null ? compraCarrito.getPaypalOrderId() : null)
+                .paypalCaptureId(compraCarrito != null ? compraCarrito.getPaypalCaptureId() : null)
+                .fechaCreacionPago(compraCarrito != null ? compraCarrito.getFechaCreacion() : null)
+                .fechaCapturaPago(compraCarrito != null ? compraCarrito.getFechaCaptura() : null)
+                .fechaTransaccion(compraCarrito != null
+                        ? obtenerFechaTransaccion(compraCarrito.getFechaCaptura(), compraCarrito.getFechaCreacion())
+                        : null)
+                .idComprador(comprador != null ? comprador.getIdUsuario() : null)
+                .nombreComprador(obtenerNombreUsuario(comprador))
+                .usuarioComprador(obtenerUsuarioLogin(comprador))
+                .fotoComprador(comprador != null ? comprador.getFotoPerfil() : null)
+                .idVendedor(vendedor != null ? vendedor.getIdUsuario() : null)
+                .nombreVendedor(obtenerNombreUsuario(vendedor))
+                .usuarioVendedor(obtenerUsuarioLogin(vendedor))
+                .fotoVendedor(vendedor != null ? vendedor.getFotoPerfil() : null)
+                .build();
+    }
+
     private void validarUsuario(Integer idUsuario) {
         if (idUsuario == null) {
             throw new IllegalArgumentException("idUsuario es obligatorio");
@@ -78,6 +178,26 @@ public class TransaccionServiceImpl implements TransaccionService {
         if (!usuarioRepository.existsById(idUsuario)) {
             throw new EntityNotFoundException("Usuario no encontrado: " + idUsuario);
         }
+    }
+
+    private String normalizarTipoOrigen(String tipoOrigen) {
+        if (tipoOrigen == null || tipoOrigen.isBlank()) {
+            throw new BusinessException("tipoOrigen es obligatorio");
+        }
+        return tipoOrigen.trim().toUpperCase();
+    }
+
+    private void validarActorDeTransaccion(Integer idUsuario, Usuario comprador, Usuario vendedor) {
+        Integer idComprador = comprador != null ? comprador.getIdUsuario() : null;
+        Integer idVendedor = vendedor != null ? vendedor.getIdUsuario() : null;
+        boolean participa = idUsuario.equals(idComprador) || idUsuario.equals(idVendedor);
+        if (!participa) {
+            throw new BusinessException("No puedes consultar una transaccion ajena");
+        }
+    }
+
+    private String definirRolUsuario(Integer idUsuario, Usuario comprador) {
+        return comprador != null && idUsuario.equals(comprador.getIdUsuario()) ? ROL_COMPRA : ROL_VENTA;
     }
 
     private List<TransaccionResumenDTO> ordenarPorFechaDesc(List<TransaccionResumenDTO> transacciones) {
@@ -96,20 +216,28 @@ public class TransaccionServiceImpl implements TransaccionService {
         return TransaccionResumenDTO.builder()
                 .idTransaccion(compraObra.getIdCompra())
                 .tipoOrigen(TIPO_OBRA_DIRECTA)
+                .idCompraCarrito(null)
                 .idObra(obra != null ? obra.getIdObra() : null)
+                .idSolicitud(compraObra.getSolicitud() != null ? compraObra.getSolicitud().getIdSolicitud() : null)
                 .tituloObra(obra != null ? obra.getTitulo() : null)
                 .imagenObra(obra != null ? obra.getImagen1() : null)
                 .nombreArtista(obtenerNombreUsuario(artista))
                 .nombreComprador(obtenerNombreUsuario(comprador))
+                .usuarioComprador(obtenerUsuarioLogin(comprador))
                 .nombreVendedor(obtenerNombreUsuario(vendedor))
+                .usuarioVendedor(obtenerUsuarioLogin(vendedor))
                 .idComprador(comprador != null ? comprador.getIdUsuario() : null)
                 .idVendedor(vendedor != null ? vendedor.getIdUsuario() : null)
                 .fotoComprador(comprador != null ? comprador.getFotoPerfil() : null)
                 .fotoVendedor(vendedor != null ? vendedor.getFotoPerfil() : null)
                 .fechaTransaccion(obtenerFechaTransaccion(compraObra.getFechaCaptura(), compraObra.getFechaCreacion()))
+                .fechaCreacionPago(compraObra.getFechaCreacion())
+                .fechaCapturaPago(compraObra.getFechaCaptura())
                 .precio(compraObra.getMonto())
                 .moneda(compraObra.getMoneda())
                 .estado(compraObra.getEstado())
+                .paypalOrderId(compraObra.getPaypalOrderId())
+                .paypalCaptureId(compraObra.getPaypalCaptureId())
                 .build();
     }
 
@@ -123,12 +251,16 @@ public class TransaccionServiceImpl implements TransaccionService {
         return TransaccionResumenDTO.builder()
                 .idTransaccion(detalle.getIdDetalle())
                 .tipoOrigen(TIPO_CARRITO)
+                .idCompraCarrito(compraCarrito != null ? compraCarrito.getIdCompraCarrito() : null)
                 .idObra(obra != null ? obra.getIdObra() : null)
+                .idSolicitud(detalle.getSolicitud() != null ? detalle.getSolicitud().getIdSolicitud() : null)
                 .tituloObra(obra != null ? obra.getTitulo() : null)
                 .imagenObra(obra != null ? obra.getImagen1() : null)
                 .nombreArtista(obtenerNombreUsuario(artista))
                 .nombreComprador(obtenerNombreUsuario(comprador))
+                .usuarioComprador(obtenerUsuarioLogin(comprador))
                 .nombreVendedor(obtenerNombreUsuario(vendedor))
+                .usuarioVendedor(obtenerUsuarioLogin(vendedor))
                 .idComprador(comprador != null ? comprador.getIdUsuario() : null)
                 .idVendedor(vendedor != null ? vendedor.getIdUsuario() : null)
                 .fotoComprador(comprador != null ? comprador.getFotoPerfil() : null)
@@ -136,9 +268,13 @@ public class TransaccionServiceImpl implements TransaccionService {
                 .fechaTransaccion(compraCarrito != null
                         ? obtenerFechaTransaccion(compraCarrito.getFechaCaptura(), compraCarrito.getFechaCreacion())
                         : null)
+                .fechaCreacionPago(compraCarrito != null ? compraCarrito.getFechaCreacion() : null)
+                .fechaCapturaPago(compraCarrito != null ? compraCarrito.getFechaCaptura() : null)
                 .precio(detalle.getPrecioUnitario())
                 .moneda(compraCarrito != null ? compraCarrito.getMoneda() : null)
                 .estado(compraCarrito != null ? compraCarrito.getEstado() : null)
+                .paypalOrderId(compraCarrito != null ? compraCarrito.getPaypalOrderId() : null)
+                .paypalCaptureId(compraCarrito != null ? compraCarrito.getPaypalCaptureId() : null)
                 .build();
     }
 
@@ -158,5 +294,12 @@ public class TransaccionServiceImpl implements TransaccionService {
 
         String nombreUsuario = usuario.getUsuario();
         return nombreUsuario != null && !nombreUsuario.isBlank() ? nombreUsuario : null;
+    }
+
+    private String obtenerUsuarioLogin(Usuario usuario) {
+        if (usuario == null || usuario.getUsuario() == null || usuario.getUsuario().isBlank()) {
+            return null;
+        }
+        return usuario.getUsuario();
     }
 }

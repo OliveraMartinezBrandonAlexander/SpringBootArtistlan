@@ -7,7 +7,6 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
 import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.CompraObraRepository;
-import com.example.demo.repository.ObraRepository;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalPagoService;
@@ -23,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,19 +36,25 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private final PayPalHttpClient payPalHttpClient;
     private final CarritoRepository carritoRepository;
     private final CompraObraRepository compraObraRepository;
-    private final ObraRepository obraRepository;
     private final ObraService obraService;
     private final NotificacionService notificacionService;
 
     @Override
     public CrearOrdenPaypalResponseDTO crearOrdenParaObra(Integer idObra, Integer compradorId) {
         Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(compradorId, idObra)
-                .orElseThrow(() -> new BusinessException("La obra no está reservada para este comprador"));
+                .orElseThrow(() -> new BusinessException("La obra no esta reservada para este comprador"));
 
         Obra obra = carrito.getObra();
         SolicitudCompraObra solicitud = carrito.getSolicitud();
 
         validarFlujoReserva(obra, solicitud, compradorId, carrito.getReservadaHasta());
+        Optional<CompraObra> compraExistente = Optional.empty();
+        if (solicitud.getIdSolicitud() != null) {
+            compraExistente = compraObraRepository.findBySolicitudIdSolicitud(solicitud.getIdSolicitud());
+            if (compraExistente.isPresent() && ESTADO_CAPTURADA.equalsIgnoreCase(compraExistente.get().getEstado())) {
+                throw new BusinessException("La reserva ya fue pagada");
+            }
+        }
 
         BigDecimal monto = obtenerMontoDesdeObra(obra);
 
@@ -60,16 +66,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             HttpResponse<Order> response = payPalHttpClient.execute(request);
             Order order = response.result();
 
-            CompraObra compra = CompraObra.builder()
-                    .obra(obra)
-                    .comprador(solicitud.getComprador())
-                    .vendedor(solicitud.getVendedor())
-                    .solicitud(solicitud)
-                    .monto(monto)
-                    .moneda(MONEDA)
-                    .estado(ESTADO_CREADA)
-                    .paypalOrderId(order.id())
-                    .build();
+            CompraObra compra = prepararCompraParaOrden(compraExistente.orElse(null), obra, solicitud, monto, order.id());
 
             CompraObra guardada = compraObraRepository.save(compra);
 
@@ -101,7 +98,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(
                         compra.getComprador().getIdUsuario(),
                         compra.getObra().getIdObra())
-                .orElseThrow(() -> new BusinessException("La reserva ya no está activa"));
+                .orElseThrow(() -> new BusinessException("La reserva ya no esta activa"));
 
         validarFlujoReserva(compra.getObra(), compra.getSolicitud(), compra.getComprador().getIdUsuario(), carrito.getReservadaHasta());
 
@@ -119,23 +116,33 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             }
 
             String captureId = extraerCaptureId(order);
+            LocalDateTime fechaCaptura = LocalDateTime.now();
             compra.setPaypalCaptureId(captureId);
             compra.setEstado(ESTADO_CAPTURADA);
-            compra.setFechaCaptura(LocalDateTime.now());
+            compra.setFechaCaptura(fechaCaptura);
             compraObraRepository.save(compra);
 
             compra.getSolicitud().setEstadoSolicitud("PAGADA");
-            compra.getSolicitud().setFechaRespuesta(LocalDateTime.now());
+            compra.getSolicitud().setFechaRespuesta(fechaCaptura);
 
             obraService.marcarComoVendida(compra.getObra().getIdObra());
             carritoRepository.delete(carrito);
+
+            notificacionService.crearNotificacionSistema(
+                    compra.getComprador().getIdUsuario(),
+                    "COMPRA_CONFIRMADA",
+                    "Compra realizada",
+                    "Tu compra de '" + compra.getObra().getTitulo() + "' fue confirmada.",
+                    "OBRA",
+                    compra.getObra().getIdObra()
+            );
 
             notificacionService.crearNotificacionUsuario(
                     compra.getVendedor().getIdUsuario(),
                     compra.getComprador().getIdUsuario(),
                     "OBRA_VENDIDA",
                     "Obra vendida",
-                    "Tu obra '" + compra.getObra().getTitulo() + "' fue pagada correctamente.",
+                    "Tu obra '" + compra.getObra().getTitulo() + "' fue vendida y pagada correctamente.",
                     "OBRA",
                     compra.getObra().getIdObra()
             );
@@ -158,7 +165,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
 
     private void validarFlujoReserva(Obra obra, SolicitudCompraObra solicitud, Integer compradorId, LocalDateTime reservadaHasta) {
         if (obra == null || solicitud == null) {
-            throw new BusinessException("Reserva inválida");
+            throw new BusinessException("Reserva invalida");
         }
         if (!"RESERVADA".equalsIgnoreCase(obra.getEstado())) {
             throw new BusinessException("La obra debe estar reservada para pagar");
@@ -170,7 +177,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             throw new BusinessException("El comprador no coincide con la reserva");
         }
         if (reservadaHasta != null && reservadaHasta.isBefore(LocalDateTime.now())) {
-            throw new BusinessException("La reserva ya expiró");
+            throw new BusinessException("La reserva ya expiro");
         }
     }
 
@@ -231,4 +238,38 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
 
         return monto;
     }
+
+    private CompraObra prepararCompraParaOrden(CompraObra compraExistente,
+                                               Obra obra,
+                                               SolicitudCompraObra solicitud,
+                                               BigDecimal monto,
+                                               String paypalOrderId) {
+        if (compraExistente == null) {
+            return CompraObra.builder()
+                    .obra(obra)
+                    .comprador(solicitud.getComprador())
+                    .vendedor(solicitud.getVendedor())
+                    .solicitud(solicitud)
+                    .monto(monto)
+                    .moneda(MONEDA)
+                    .estado(ESTADO_CREADA)
+                    .paypalOrderId(paypalOrderId)
+                    .build();
+        }
+
+        compraExistente.setObra(obra);
+        compraExistente.setComprador(solicitud.getComprador());
+        compraExistente.setVendedor(solicitud.getVendedor());
+        compraExistente.setSolicitud(solicitud);
+        compraExistente.setMonto(monto);
+        compraExistente.setMoneda(MONEDA);
+        compraExistente.setEstado(ESTADO_CREADA);
+        compraExistente.setPaypalOrderId(paypalOrderId);
+        compraExistente.setPaypalCaptureId(null);
+        compraExistente.setFechaCreacion(LocalDateTime.now());
+        compraExistente.setFechaCaptura(null);
+        return compraExistente;
+    }
 }
+
+

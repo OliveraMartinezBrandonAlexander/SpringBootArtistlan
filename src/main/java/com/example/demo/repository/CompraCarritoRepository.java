@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface CompraCarritoRepository extends JpaRepository<CompraCarrito, Integer> {
@@ -18,7 +19,10 @@ public interface CompraCarritoRepository extends JpaRepository<CompraCarrito, In
             LEFT JOIN FETCH cc.detalles d
             LEFT JOIN FETCH d.obra o
             LEFT JOIN FETCH d.vendedor
+            LEFT JOIN FETCH d.solicitud
             WHERE cc.paypalOrderId = :paypalOrderId
             """)
     Optional<CompraCarrito> findByPaypalOrderIdConDetalles(@Param("paypalOrderId") String paypalOrderId);
+
+    List<CompraCarrito> findByCompradorIdUsuarioAndEstadoNot(Integer idUsuarioComprador, String estado);
 }
