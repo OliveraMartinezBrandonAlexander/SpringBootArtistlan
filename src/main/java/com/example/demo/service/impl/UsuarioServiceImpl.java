@@ -8,9 +8,9 @@ import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaUsuariosRepository;
-import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.ObraService;
 import com.example.demo.service.UsuarioService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +41,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     private CategoriaUsuariosRepository categoriaUsuariosRepository;
 
     @Autowired
-    private ObraRepository obraRepository;
+    private ObraService obraService;
 
     @Autowired
     private ServicioRepository servicioRepository;
@@ -115,7 +115,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
 
         categoriaUsuariosRepository.deleteByUsuarioId(id);
-        obraRepository.deleteByUsuarioId(id);
+        obraService.eliminarPorUsuarioId(id);
         servicioRepository.deleteByUsuarioId(id);
 
         repo.deleteById(id);

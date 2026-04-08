@@ -16,6 +16,7 @@ public class SolicitudCompraDTO {
     String fotoComprador;
     Integer idVendedor;
     String nombreVendedor;
+    String fotoVendedor;
     String mensajeComprador;
     String estadoSolicitud;
     LocalDateTime fechaCreacion;

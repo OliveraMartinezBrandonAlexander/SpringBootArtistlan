@@ -23,22 +23,25 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional(readOnly = true)
     public List<NotificacionDTO> listarPorUsuario(Integer idUsuario) {
+        validarUsuarioExiste(idUsuario);
         return notificacionRepository.findActivasPorUsuario(idUsuario).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public NotificacionDTO obtenerDetalle(Integer idUsuario, Integer idNotificacion) {
+        validarUsuarioExiste(idUsuario);
         Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
-                .orElseThrow(() -> new ResourceNotFoundException("Notificación no encontrada"));
+                .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         return toDto(notificacion);
     }
 
     @Override
     @Transactional
     public NotificacionDTO marcarLeida(Integer idUsuario, Integer idNotificacion) {
+        validarUsuarioExiste(idUsuario);
         Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
-                .orElseThrow(() -> new ResourceNotFoundException("Notificación no encontrada"));
+                .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         notificacion.setLeida(true);
         return toDto(notificacionRepository.save(notificacion));
     }
@@ -46,14 +49,16 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional
     public void marcarTodasLeidas(Integer idUsuario) {
+        validarUsuarioExiste(idUsuario);
         notificacionRepository.marcarTodasLeidas(idUsuario);
     }
 
     @Override
     @Transactional
     public void eliminarLogicamente(Integer idUsuario, Integer idNotificacion) {
+        validarUsuarioExiste(idUsuario);
         Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
-                .orElseThrow(() -> new ResourceNotFoundException("Notificación no encontrada"));
+                .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         notificacion.setEliminada(true);
         notificacionRepository.save(notificacion);
     }
@@ -61,6 +66,7 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional(readOnly = true)
     public long contarNoLeidas(Integer idUsuario) {
+        validarUsuarioExiste(idUsuario);
         return notificacionRepository.countByUsuarioDestinoIdUsuarioAndLeidaFalseAndEliminadaFalse(idUsuario);
     }
 
@@ -101,20 +107,43 @@ public class NotificacionServiceImpl implements NotificacionService {
                 .build());
     }
 
-    private NotificacionDTO toDto(Notificacion n) {
+    private NotificacionDTO toDto(Notificacion notificacion) {
+        Usuario usuarioOrigen = notificacion.getUsuarioOrigen();
+        String usuarioOrigenLogin = null;
+        String nombreOrigen = null;
+        String fotoOrigen = null;
+
+        if (usuarioOrigen != null) {
+            usuarioOrigenLogin = usuarioOrigen.getUsuario();
+            nombreOrigen = usuarioOrigen.getNombreCompleto();
+            if (nombreOrigen == null || nombreOrigen.isBlank()) {
+                nombreOrigen = usuarioOrigenLogin;
+            }
+            fotoOrigen = usuarioOrigen.getFotoPerfil();
+        }
+
         return NotificacionDTO.builder()
-                .idNotificacion(n.getIdNotificacion())
-                .tipoOrigen(n.getTipoOrigen())
-                .idUsuarioOrigen(n.getUsuarioOrigen() != null ? n.getUsuarioOrigen().getIdUsuario() : null)
-                .nombreUsuarioOrigen(n.getUsuarioOrigen() != null ? n.getUsuarioOrigen().getUsuario() : null)
-                .fotoPerfilOrigen(n.getUsuarioOrigen() != null ? n.getUsuarioOrigen().getFotoPerfil() : null)
-                .tipoNotificacion(n.getTipoNotificacion())
-                .titulo(n.getTitulo())
-                .mensaje(n.getMensaje())
-                .referenciaTipo(n.getReferenciaTipo())
-                .referenciaId(n.getReferenciaId())
-                .leida(n.getLeida())
-                .fechaCreacion(n.getFechaCreacion())
+                .idNotificacion(notificacion.getIdNotificacion())
+                .tipoOrigen(notificacion.getTipoOrigen())
+                .idUsuarioOrigen(usuarioOrigen != null ? usuarioOrigen.getIdUsuario() : null)
+                .usuarioOrigen(usuarioOrigenLogin)
+                .nombreOrigen(nombreOrigen)
+                .fotoOrigen(fotoOrigen)
+                .nombreUsuarioOrigen(nombreOrigen)
+                .fotoPerfilOrigen(fotoOrigen)
+                .tipoNotificacion(notificacion.getTipoNotificacion())
+                .titulo(notificacion.getTitulo())
+                .mensaje(notificacion.getMensaje())
+                .referenciaTipo(notificacion.getReferenciaTipo())
+                .referenciaId(notificacion.getReferenciaId())
+                .leida(notificacion.getLeida())
+                .fechaCreacion(notificacion.getFechaCreacion())
                 .build();
+    }
+
+    private void validarUsuarioExiste(Integer idUsuario) {
+        if (!usuarioRepository.existsById(idUsuario)) {
+            throw new ResourceNotFoundException("Usuario no encontrado");
+        }
     }
 }

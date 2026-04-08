@@ -5,6 +5,7 @@ import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
+import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,6 +26,7 @@ public class ObraServiceImpl implements ObraService {
     private static final String ESTADO_EN_EXHIBICION = "EN_EXHIBICION";
     private static final String ESTADO_RESERVADA = "RESERVADA";
     private static final String ESTADO_VENDIDA = "VENDIDA";
+    private static final String ESTADO_TRANSACCION_COMPLETADA = "CAPTURADA";
     private static final int CATEGORIA_OBRA_MIN = 1;
     private static final int CATEGORIA_OBRA_MAX = 18;
 
@@ -37,6 +39,7 @@ public class ObraServiceImpl implements ObraService {
     private final CompraObraRepository compraObraRepository;
     private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
     private final SolicitudCompraObraRepository solicitudRepository;
+    private final NotificacionService notificacionService;
 
     @Override
     public Obra guardar(Obra o) {
@@ -74,6 +77,14 @@ public class ObraServiceImpl implements ObraService {
                     && ESTADO_EN_VENTA.equals(estadoObjetivo)
                     && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
                 existente.setPrecio(obra.getPrecio());
+            }
+
+            if (ESTADO_EN_VENTA.equals(estadoActual) && ESTADO_EN_EXHIBICION.equals(estadoObjetivo)) {
+                cancelarSolicitudesActivasDeObra(
+                        existente.getIdObra(),
+                        "La obra paso a En exhibicion",
+                        "Tu solicitud para '%s' fue cancelada porque la obra paso a En exhibicion.",
+                        true);
             }
 
             existente.setImagen1(obra.getImagen1());
@@ -150,6 +161,14 @@ public class ObraServiceImpl implements ObraService {
             obraExistente.setPrecio(obraDTO.getPrecio());
         }
 
+        if (ESTADO_EN_VENTA.equals(estadoActual) && ESTADO_EN_EXHIBICION.equals(estadoObjetivo)) {
+            cancelarSolicitudesActivasDeObra(
+                    obraExistente.getIdObra(),
+                    "La obra paso a En exhibicion",
+                    "Tu solicitud para '%s' fue cancelada porque la obra paso a En exhibicion.",
+                    true);
+        }
+
         if (obraDTO.getIdCategoria() != null && obraDTO.getIdCategoria() > 0) {
             reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
         }
@@ -162,17 +181,24 @@ public class ObraServiceImpl implements ObraService {
     @Transactional
     public void eliminarObraDeUsuario(Integer usuarioId, Integer obraId) {
         Obra obra = obraRepository.findById(obraId)
-                .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
+                .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obra, usuarioId);
         validarEstadoParaEliminar(obra);
-        favoritosRepository.deleteByObraIdObra(obraId);
-        cancelarSolicitudesPendientes(obra.getIdObra());
+        validarSinVentaReal(obra.getIdObra());
         try {
+            favoritosRepository.deleteByObraIdObra(obraId);
+            cancelarSolicitudesActivasDeObra(
+                    obra.getIdObra(),
+                    "Obra eliminada",
+                    "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada.",
+                    false);
+            limpiarReferenciasCompraNoVendida(obra.getIdObra());
+            eliminarSolicitudesDeObra(obra.getIdObra());
             obraRepository.delete(obra);
             obraRepository.flush();
         } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException("No se puede eliminar la obra porque tiene historial de compras o transacciones.");
+            throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
         }
     }
 
@@ -184,13 +210,20 @@ public class ObraServiceImpl implements ObraService {
             return false;
         }
         validarEstadoParaEliminar(obra);
-        favoritosRepository.deleteByObraIdObra(id);
-        cancelarSolicitudesPendientes(id);
+        validarSinVentaReal(obra.getIdObra());
         try {
+            favoritosRepository.deleteByObraIdObra(id);
+            cancelarSolicitudesActivasDeObra(
+                    id,
+                    "Obra eliminada",
+                    "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada.",
+                    false);
+            limpiarReferenciasCompraNoVendida(id);
+            eliminarSolicitudesDeObra(id);
             obraRepository.deleteById(id);
             obraRepository.flush();
         } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException("No se puede eliminar la obra porque tiene historial de compras o transacciones.");
+            throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
         }
         return true;
     }
@@ -218,6 +251,22 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional
     public void eliminarPorUsuarioId(Integer usuarioId) {
+        List<Obra> obras = obraRepository.findByUsuarioIdUsuario(usuarioId);
+        for (Obra obra : obras) {
+            validarSinVentaReal(obra.getIdObra());
+            try {
+                favoritosRepository.deleteByObraIdObra(obra.getIdObra());
+                cancelarSolicitudesActivasDeObra(
+                        obra.getIdObra(),
+                        "Obra eliminada por eliminacion de usuario",
+                        "Tu solicitud para '%s' fue cancelada porque el perfil del vendedor fue eliminado.",
+                        false);
+                limpiarReferenciasCompraNoVendida(obra.getIdObra());
+                eliminarSolicitudesDeObra(obra.getIdObra());
+            } catch (DataIntegrityViolationException ex) {
+                throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
+            }
+        }
         obraRepository.deleteByUsuarioIdUsuario(usuarioId);
     }
 
@@ -313,18 +362,53 @@ public class ObraServiceImpl implements ObraService {
         }
     }
 
-    private void cancelarSolicitudesPendientes(Integer obraId) {
+    private void cancelarSolicitudesActivasDeObra(Integer obraId, String motivo, String mensajeNotificacion, boolean incluirReferenciaSolicitud) {
         List<SolicitudCompraObra> activas = solicitudRepository.findByObraIdObraAndEstadoSolicitudIn(
                 obraId,
-                List.of("PENDIENTE", "ACEPTADA", "RECHAZADA")
+                List.of("PENDIENTE", "ACEPTADA")
         );
-        for (SolicitudCompraObra solicitud : activas) {
-            if (!"PAGADA".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
-                solicitud.setEstadoSolicitud("CANCELADA");
-                solicitud.setFechaRespuesta(LocalDateTime.now());
-                solicitud.setMotivoRechazo("Obra eliminada");
-            }
+        if (activas.isEmpty()) {
+            return;
         }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        for (SolicitudCompraObra solicitud : activas) {
+            solicitud.setEstadoSolicitud("CANCELADA");
+            solicitud.setFechaRespuesta(ahora);
+            solicitud.setFechaExpiracionReserva(null);
+            solicitud.setMotivoRechazo(motivo);
+        }
+
         solicitudRepository.saveAll(activas);
+        carritoRepository.eliminarTodosPorObra(obraId);
+
+        for (SolicitudCompraObra solicitud : activas) {
+            String tituloObra = solicitud.getObra() != null ? solicitud.getObra().getTitulo() : "la obra";
+            notificacionService.crearNotificacionSistema(
+                    solicitud.getComprador().getIdUsuario(),
+                    "SOLICITUD_CANCELADA",
+                    "Solicitud cancelada",
+                    String.format(mensajeNotificacion, tituloObra),
+                    incluirReferenciaSolicitud ? "SOLICITUD" : null,
+                    incluirReferenciaSolicitud ? solicitud.getIdSolicitud() : null
+            );
+        }
+    }
+
+    private void validarSinVentaReal(Integer obraId) {
+        boolean ventaDirectaReal = compraObraRepository.existsByObraIdObraAndEstado(obraId, ESTADO_TRANSACCION_COMPLETADA);
+        boolean ventaCarritoReal = compraCarritoDetalleRepository.existsByObraIdObraAndCompraCarritoEstado(obraId, ESTADO_TRANSACCION_COMPLETADA);
+        if (ventaDirectaReal || ventaCarritoReal) {
+            throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
+        }
+    }
+
+    private void limpiarReferenciasCompraNoVendida(Integer obraId) {
+        compraCarritoDetalleRepository.deleteNoVendidasByObraId(obraId, ESTADO_TRANSACCION_COMPLETADA);
+        compraObraRepository.deleteNoVendidasByObraId(obraId, ESTADO_TRANSACCION_COMPLETADA);
+    }
+
+    private void eliminarSolicitudesDeObra(Integer obraId) {
+        solicitudRepository.deleteByObraIdObra(obraId);
     }
 }

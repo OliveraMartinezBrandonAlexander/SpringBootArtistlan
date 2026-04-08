@@ -41,6 +41,8 @@ public interface SolicitudCompraObraRepository extends JpaRepository<SolicitudCo
 
     boolean existsByObraIdObraAndCompradorIdUsuarioAndEstadoSolicitudIn(Integer idObra, Integer idComprador, List<String> estados);
 
+    long countByObraIdObraAndCompradorIdUsuarioAndEstadoSolicitudIn(Integer idObra, Integer idComprador, List<String> estados);
+
     boolean existsByObraIdObraAndEstadoSolicitud(Integer idObra, String estadoSolicitud);
 
     List<SolicitudCompraObra> findByObraIdObraAndEstadoSolicitud(Integer idObra, String estadoSolicitud);
@@ -71,4 +73,13 @@ public interface SolicitudCompraObraRepository extends JpaRepository<SolicitudCo
                                @Param("fechaRespuesta") LocalDateTime fechaRespuesta,
                                @Param("motivo") String motivo,
                                @Param("idSolicitudActual") Integer idSolicitudActual);
+
+    @Query("""
+            SELECT COUNT(s) FROM SolicitudCompraObra s
+            WHERE s.estadoSolicitud = 'PENDIENTE'
+              AND s.vendedor.idUsuario = :usuarioId
+            """)
+    long contarPendientesDeUsuario(@Param("usuarioId") Integer usuarioId);
+
+    long deleteByObraIdObra(Integer idObra);
 }

@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.solicitud.ContadorSolicitudesPendientesDTO;
 import com.example.demo.dto.solicitud.CrearSolicitudCompraRequestDTO;
 import com.example.demo.dto.solicitud.ResolverSolicitudRequestDTO;
 import com.example.demo.dto.solicitud.SolicitudCompraDTO;
@@ -31,6 +32,13 @@ public class SolicitudCompraController {
     @GetMapping("/enviadas/{compradorId}")
     public ResponseEntity<List<SolicitudCompraDTO>> enviadas(@PathVariable Integer compradorId) {
         return ResponseEntity.ok(solicitudCompraService.listarEnviadas(compradorId));
+    }
+
+    @GetMapping("/{usuarioId}/contador-pendientes")
+    public ResponseEntity<ContadorSolicitudesPendientesDTO> contadorPendientes(@PathVariable Integer usuarioId) {
+        return ResponseEntity.ok(ContadorSolicitudesPendientesDTO.builder()
+                .pendientes(solicitudCompraService.contarPendientesUsuario(usuarioId))
+                .build());
     }
 
     @GetMapping("/{idSolicitud}")

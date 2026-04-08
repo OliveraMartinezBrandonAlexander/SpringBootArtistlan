@@ -36,6 +36,7 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Inte
             UPDATE Notificacion n
             SET n.leida = true
             WHERE n.usuarioDestino.idUsuario = :usuarioId
+              AND n.leida = false
               AND n.eliminada = false
             """)
     int marcarTodasLeidas(@Param("usuarioId") Integer usuarioId);

@@ -26,6 +26,7 @@ import java.util.List;
 public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
     private static final int DIAS_RESERVA = 7;
+    private static final int MAX_INTENTOS_FALLIDOS_POR_OBRA = 3;
 
     private final SolicitudCompraObraRepository solicitudRepository;
     private final ObraRepository obraRepository;
@@ -36,6 +37,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO crearSolicitud(CrearSolicitudCompraRequestDTO request) {
+        validarCrearRequest(request);
+
         Obra obra = obraRepository.findById(request.getIdObra())
                 .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada"));
 
@@ -52,7 +55,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         }
 
         if (!"EN_VENTA".equalsIgnoreCase(obra.getEstado())) {
-            throw new BusinessException("La obra no está disponible para solicitud");
+            throw new BusinessException("La obra no esta disponible para solicitud");
         }
 
         boolean duplicada = solicitudRepository.existsByObraIdObraAndCompradorIdUsuarioAndEstadoSolicitudIn(
@@ -61,25 +64,24 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
             throw new BusinessException("Ya existe una solicitud activa para esta obra");
         }
 
+        long intentosFallidos = solicitudRepository.countByObraIdObraAndCompradorIdUsuarioAndEstadoSolicitudIn(
+                obra.getIdObra(),
+                comprador.getIdUsuario(),
+                List.of("RECHAZADA", "CANCELADA", "EXPIRADA")
+        );
+        if (intentosFallidos >= MAX_INTENTOS_FALLIDOS_POR_OBRA) {
+            throw new BusinessException("Ya alcanzaste el m\u00E1ximo de 3 intentos para esta obra.");
+        }
+
         SolicitudCompraObra solicitud = SolicitudCompraObra.builder()
                 .obra(obra)
                 .comprador(comprador)
                 .vendedor(vendedor)
-                .mensajeComprador(request.getMensajeComprador())
+                .mensajeComprador(normalizarMensajeComprador(request.getMensajeComprador()))
                 .estadoSolicitud("PENDIENTE")
                 .build();
 
         SolicitudCompraObra guardada = solicitudRepository.save(solicitud);
-
-        notificacionService.crearNotificacionUsuario(
-                vendedor.getIdUsuario(),
-                comprador.getIdUsuario(),
-                "SOLICITUD_CREADA",
-                "Nueva solicitud de compra",
-                comprador.getUsuario() + " solicitó la compra de '" + obra.getTitulo() + "'.",
-                "SOLICITUD",
-                guardada.getIdSolicitud()
-        );
 
         return toDto(guardada);
     }
@@ -87,18 +89,22 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional(readOnly = true)
     public List<SolicitudCompraDTO> listarRecibidas(Integer vendedorId) {
+        validarUsuarioExiste(vendedorId, "Vendedor no encontrado");
         return solicitudRepository.findRecibidas(vendedorId).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<SolicitudCompraDTO> listarEnviadas(Integer compradorId) {
+        validarUsuarioExiste(compradorId, "Comprador no encontrado");
         return solicitudRepository.findEnviadas(compradorId).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public SolicitudCompraDTO obtenerDetalle(Integer idSolicitud, Integer actorId) {
+        validarIdRequerido(actorId, "actorId es obligatorio");
+        validarUsuarioExiste(actorId, "Actor no encontrado");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
         if (!actorId.equals(solicitud.getComprador().getIdUsuario()) && !actorId.equals(solicitud.getVendedor().getIdUsuario())) {
             throw new BusinessException("No puedes consultar esta solicitud");
@@ -109,6 +115,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO aceptar(Integer idSolicitud, Integer idVendedor) {
+        validarIdRequerido(idVendedor, "idVendedor es obligatorio");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
         validarAccionVendedor(solicitud, idVendedor);
 
@@ -118,12 +125,16 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
         Obra obra = solicitud.getObra();
         if (!"EN_VENTA".equalsIgnoreCase(obra.getEstado())) {
-            throw new BusinessException("La obra no está disponible para reserva");
+            throw new BusinessException("La obra no esta disponible para reserva");
         }
 
         if (solicitudRepository.existsByObraIdObraAndEstadoSolicitud(obra.getIdObra(), "ACEPTADA")) {
             throw new BusinessException("La obra ya tiene una solicitud aceptada");
         }
+
+        List<SolicitudCompraObra> pendientesDeLaObra = solicitudRepository.findByObraIdObraAndEstadoSolicitud(
+                obra.getIdObra(),
+                "PENDIENTE");
 
         LocalDateTime expiracion = LocalDateTime.now().plusDays(DIAS_RESERVA);
 
@@ -150,12 +161,28 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 "Solicitud rechazada porque otra solicitud fue aceptada",
                 solicitud.getIdSolicitud());
 
+        for (SolicitudCompraObra pendiente : pendientesDeLaObra) {
+            if (pendiente.getIdSolicitud().equals(solicitud.getIdSolicitud())) {
+                continue;
+            }
+
+            notificacionService.crearNotificacionUsuario(
+                    pendiente.getComprador().getIdUsuario(),
+                    idVendedor,
+                    "SOLICITUD_CANCELADA",
+                    "Solicitud cancelada",
+                    "Tu solicitud para '" + obra.getTitulo() + "' fue cancelada porque se acepto otra solicitud.",
+                    "SOLICITUD",
+                    pendiente.getIdSolicitud()
+            );
+        }
+
         notificacionService.crearNotificacionUsuario(
                 solicitud.getComprador().getIdUsuario(),
                 idVendedor,
                 "SOLICITUD_ACEPTADA",
                 "Solicitud aceptada",
-                "Tu solicitud para '" + obra.getTitulo() + "' fue aceptada. Tienes 7 días para completar el pago.",
+                "Tu solicitud para '" + obra.getTitulo() + "' fue aceptada. Tienes 7 dias para completar el pago.",
                 "SOLICITUD",
                 solicitud.getIdSolicitud()
         );
@@ -166,6 +193,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO rechazar(Integer idSolicitud, Integer idVendedor, String motivo) {
+        validarIdRequerido(idVendedor, "idVendedor es obligatorio");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
         validarAccionVendedor(solicitud, idVendedor);
 
@@ -175,7 +203,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
         solicitud.setEstadoSolicitud("RECHAZADA");
         solicitud.setFechaRespuesta(LocalDateTime.now());
-        solicitud.setMotivoRechazo(motivo);
+        String motivoNormalizado = normalizarTextoOpcional(motivo);
+        solicitud.setMotivoRechazo(motivoNormalizado);
         solicitudRepository.save(solicitud);
 
         notificacionService.crearNotificacionUsuario(
@@ -183,9 +212,9 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 idVendedor,
                 "SOLICITUD_RECHAZADA",
                 "Solicitud rechazada",
-                "Tu solicitud para '" + solicitud.getObra().getTitulo() + "' fue rechazada.",
-                "SOLICITUD",
-                solicitud.getIdSolicitud()
+                construirMensajeRechazo(solicitud.getObra().getTitulo(), motivoNormalizado),
+                null,
+                null
         );
 
         return toDto(solicitud);
@@ -194,6 +223,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO cancelar(Integer idSolicitud, Integer idComprador) {
+        validarIdRequerido(idComprador, "idComprador es obligatorio");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
         if (!idComprador.equals(solicitud.getComprador().getIdUsuario())) {
             throw new BusinessException("Solo el comprador puede cancelar su solicitud");
@@ -218,6 +248,13 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public long contarPendientesUsuario(Integer usuarioId) {
+        validarUsuarioExiste(usuarioId, "Usuario no encontrado");
+        return solicitudRepository.contarPendientesDeUsuario(usuarioId);
+    }
+
+    @Override
     @Transactional
     public int expirarReservasVencidas() {
         List<SolicitudCompraObra> vencidas = solicitudRepository.findReservasExpiradas(LocalDateTime.now());
@@ -236,7 +273,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                     solicitud.getComprador().getIdUsuario(),
                     "RESERVA_EXPIRADA",
                     "Reserva expirada",
-                    "La reserva de '" + solicitud.getObra().getTitulo() + "' expiró.",
+                    "La reserva de '" + solicitud.getObra().getTitulo() + "' expiro.",
                     "SOLICITUD",
                     solicitud.getIdSolicitud()
             );
@@ -251,11 +288,33 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     }
 
     private void validarAccionVendedor(SolicitudCompraObra solicitud, Integer idVendedor) {
+        validarIdRequerido(idVendedor, "idVendedor es obligatorio");
         if (!idVendedor.equals(solicitud.getVendedor().getIdUsuario())) {
-            throw new BusinessException("Solo el vendedor puede realizar esta acción");
+            throw new BusinessException("Solo el vendedor puede realizar esta accion");
         }
         if (solicitud.getObra() == null) {
             throw new BusinessException("La obra asociada ya no existe");
+        }
+    }
+
+    private void validarCrearRequest(CrearSolicitudCompraRequestDTO request) {
+        if (request == null) {
+            throw new BusinessException("El request de solicitud es obligatorio");
+        }
+        validarIdRequerido(request.getIdObra(), "idObra es obligatorio");
+        validarIdRequerido(request.getIdComprador(), "idComprador es obligatorio");
+    }
+
+    private void validarIdRequerido(Integer id, String mensaje) {
+        if (id == null) {
+            throw new BusinessException(mensaje);
+        }
+    }
+
+    private void validarUsuarioExiste(Integer idUsuario, String mensajeNoEncontrado) {
+        validarIdRequerido(idUsuario, "idUsuario es obligatorio");
+        if (!usuarioRepository.existsById(idUsuario)) {
+            throw new ResourceNotFoundException(mensajeNoEncontrado);
         }
     }
 
@@ -269,6 +328,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 .fotoComprador(s.getComprador() != null ? s.getComprador().getFotoPerfil() : null)
                 .idVendedor(s.getVendedor() != null ? s.getVendedor().getIdUsuario() : null)
                 .nombreVendedor(s.getVendedor() != null ? s.getVendedor().getUsuario() : null)
+                .fotoVendedor(s.getVendedor() != null ? s.getVendedor().getFotoPerfil() : null)
                 .mensajeComprador(s.getMensajeComprador())
                 .estadoSolicitud(s.getEstadoSolicitud())
                 .fechaCreacion(s.getFechaCreacion())
@@ -276,5 +336,25 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 .fechaExpiracionReserva(s.getFechaExpiracionReserva())
                 .motivoRechazo(s.getMotivoRechazo())
                 .build();
+    }
+
+    private String normalizarMensajeComprador(String mensaje) {
+        return normalizarTextoOpcional(mensaje);
+    }
+
+    private String normalizarTextoOpcional(String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String limpio = texto.trim();
+        return limpio.isEmpty() ? null : limpio;
+    }
+
+    private String construirMensajeRechazo(String tituloObra, String motivoRechazo) {
+        String mensajeBase = "Tu solicitud para '" + tituloObra + "' fue rechazada.";
+        if (motivoRechazo == null) {
+            return mensajeBase;
+        }
+        return mensajeBase + " Motivo: " + motivoRechazo;
     }
 }

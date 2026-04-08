@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import com.example.demo.model.CompraCarritoDetalle;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,4 +41,13 @@ public interface CompraCarritoDetalleRepository extends JpaRepository<CompraCarr
     boolean existsByObraIdObra(Integer idObra);
 
     boolean existsByObraIdObraAndCompraCarritoEstado(Integer idObra, String estado);
+
+    @Modifying
+    @Query("""
+            DELETE FROM CompraCarritoDetalle d
+            WHERE d.obra.idObra = :idObra
+              AND d.compraCarrito.estado <> :estadoVentaReal
+            """)
+    int deleteNoVendidasByObraId(@Param("idObra") Integer idObra,
+                                 @Param("estadoVentaReal") String estadoVentaReal);
 }

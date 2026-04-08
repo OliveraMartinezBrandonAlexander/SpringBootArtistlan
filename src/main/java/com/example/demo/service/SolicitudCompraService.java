@@ -13,5 +13,6 @@ public interface SolicitudCompraService {
     SolicitudCompraDTO aceptar(Integer idSolicitud, Integer idVendedor);
     SolicitudCompraDTO rechazar(Integer idSolicitud, Integer idVendedor, String motivo);
     SolicitudCompraDTO cancelar(Integer idSolicitud, Integer idComprador);
+    long contarPendientesUsuario(Integer usuarioId);
     int expirarReservasVencidas();
 }

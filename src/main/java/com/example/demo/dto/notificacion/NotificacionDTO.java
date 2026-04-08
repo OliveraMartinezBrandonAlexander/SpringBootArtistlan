@@ -11,6 +11,9 @@ public class NotificacionDTO {
     Integer idNotificacion;
     String tipoOrigen;
     Integer idUsuarioOrigen;
+    String usuarioOrigen;
+    String nombreOrigen;
+    String fotoOrigen;
     String nombreUsuarioOrigen;
     String fotoPerfilOrigen;
     String tipoNotificacion;
