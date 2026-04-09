@@ -37,10 +37,14 @@ public class TransaccionDetalleDTO {
     private Integer idComprador;
     private String nombreComprador;
     private String usuarioComprador;
+    private String correoComprador;
+    private String telefonoComprador;
     private String fotoComprador;
 
     private Integer idVendedor;
     private String nombreVendedor;
     private String usuarioVendedor;
+    private String correoVendedor;
+    private String telefonoVendedor;
     private String fotoVendedor;
 }

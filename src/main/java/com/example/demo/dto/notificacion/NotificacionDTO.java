@@ -17,6 +17,7 @@ public class NotificacionDTO {
     String nombreUsuarioOrigen;
     String fotoPerfilOrigen;
     String tipoNotificacion;
+    String rolDestino;
     String titulo;
     String mensaje;
     String referenciaTipo;

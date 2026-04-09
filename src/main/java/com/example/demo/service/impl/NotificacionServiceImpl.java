@@ -17,6 +17,19 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NotificacionServiceImpl implements NotificacionService {
 
+    private static final String ROL_COMPRADOR = "COMPRADOR";
+    private static final String ROL_VENDEDOR = "VENDEDOR";
+    private static final String ROL_SISTEMA = "SISTEMA";
+
+    private static final String TIPO_SOLICITUD_CANCELADA = "SOLICITUD_CANCELADA";
+    private static final String TIPO_RESERVA_LIBERADA = "RESERVA_LIBERADA";
+    private static final String TIPO_RESERVA_EXPIRADA = "RESERVA_EXPIRADA";
+
+    private static final String REF_CARRITO = "CARRITO";
+    private static final String REF_OBRA = "OBRA";
+    private static final String REF_SOLICITUD_ENVIADA = "SOLICITUD_ENVIADA";
+    private static final String REF_SOLICITUD_RECIBIDA = "SOLICITUD_RECIBIDA";
+
     private final NotificacionRepository notificacionRepository;
     private final UsuarioRepository usuarioRepository;
 
@@ -132,6 +145,7 @@ public class NotificacionServiceImpl implements NotificacionService {
                 .nombreUsuarioOrigen(nombreOrigen)
                 .fotoPerfilOrigen(fotoOrigen)
                 .tipoNotificacion(notificacion.getTipoNotificacion())
+                .rolDestino(resolverRolDestino(notificacion))
                 .titulo(notificacion.getTitulo())
                 .mensaje(notificacion.getMensaje())
                 .referenciaTipo(notificacion.getReferenciaTipo())
@@ -139,6 +153,57 @@ public class NotificacionServiceImpl implements NotificacionService {
                 .leida(notificacion.getLeida())
                 .fechaCreacion(notificacion.getFechaCreacion())
                 .build();
+    }
+
+    private String resolverRolDestino(Notificacion notificacion) {
+        if (notificacion == null) {
+            return ROL_SISTEMA;
+        }
+
+        String tipo = normalizar(notificacion.getTipoNotificacion());
+        String referencia = normalizar(notificacion.getReferenciaTipo());
+
+        if (TIPO_SOLICITUD_CANCELADA.equals(tipo)) {
+            return resolverRolSolicitudCancelada(notificacion, referencia);
+        }
+
+        if (TIPO_RESERVA_LIBERADA.equals(tipo) || TIPO_RESERVA_EXPIRADA.equals(tipo)) {
+            return resolverRolEventoReserva(notificacion, referencia);
+        }
+
+        return "USUARIO".equalsIgnoreCase(notificacion.getTipoOrigen()) ? ROL_COMPRADOR : ROL_SISTEMA;
+    }
+
+    private String resolverRolSolicitudCancelada(Notificacion notificacion, String referencia) {
+        if (REF_SOLICITUD_RECIBIDA.equals(referencia)) {
+            return ROL_VENDEDOR;
+        }
+        if (REF_SOLICITUD_ENVIADA.equals(referencia) || REF_CARRITO.equals(referencia) || "SOLICITUD".equals(referencia)) {
+            return ROL_COMPRADOR;
+        }
+        if ("SISTEMA".equalsIgnoreCase(notificacion.getTipoOrigen())) {
+            return ROL_COMPRADOR;
+        }
+        if (notificacion.getUsuarioOrigen() != null && notificacion.getUsuarioDestino() != null
+                && notificacion.getUsuarioOrigen().getIdUsuario() != null
+                && notificacion.getUsuarioOrigen().getIdUsuario().equals(notificacion.getUsuarioDestino().getIdUsuario())) {
+            return ROL_COMPRADOR;
+        }
+        return ROL_SISTEMA;
+    }
+
+    private String resolverRolEventoReserva(Notificacion notificacion, String referencia) {
+        if (REF_CARRITO.equals(referencia) || REF_SOLICITUD_ENVIADA.equals(referencia)) {
+            return ROL_COMPRADOR;
+        }
+        if (REF_OBRA.equals(referencia) || REF_SOLICITUD_RECIBIDA.equals(referencia)) {
+            return ROL_VENDEDOR;
+        }
+        return "SISTEMA".equalsIgnoreCase(notificacion.getTipoOrigen()) ? ROL_SISTEMA : ROL_COMPRADOR;
+    }
+
+    private String normalizar(String valor) {
+        return valor == null ? "" : valor.trim().toUpperCase();
     }
 
     private void validarUsuarioExiste(Integer idUsuario) {

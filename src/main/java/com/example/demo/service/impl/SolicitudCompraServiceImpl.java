@@ -185,8 +185,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                     "SOLICITUD_CANCELADA",
                     "Solicitud cancelada",
                     "Tu solicitud para '" + obra.getTitulo() + "' fue cancelada porque se acepto otra solicitud.",
-                    null,
-                    null
+                    "SOLICITUD_ENVIADA",
+                    pendiente.getIdSolicitud()
             );
         }
 
@@ -258,13 +258,14 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         }
 
         String tituloObra = solicitud.getObra() != null ? solicitud.getObra().getTitulo() : "la obra";
-        notificacionService.crearNotificacionSistema(
+        notificacionService.crearNotificacionUsuario(
+                idComprador,
                 idComprador,
                 "SOLICITUD_CANCELADA",
                 "Solicitud cancelada",
                 "Cancelaste tu solicitud para '" + tituloObra + "'.",
-                null,
-                null
+                "SOLICITUD_ENVIADA",
+                solicitud.getIdSolicitud()
         );
 
         if (solicitud.getVendedor() != null) {
@@ -274,8 +275,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                     "SOLICITUD_CANCELADA",
                     "Solicitud cancelada",
                     "El comprador cancelo la solicitud para '" + tituloObra + "'.",
-                    null,
-                    null
+                    "SOLICITUD_RECIBIDA",
+                    solicitud.getIdSolicitud()
             );
         }
 

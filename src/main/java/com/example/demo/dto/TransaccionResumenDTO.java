@@ -24,8 +24,12 @@ public class TransaccionResumenDTO {
     private String nombreArtista;
     private String nombreComprador;
     private String usuarioComprador;
+    private String correoComprador;
+    private String telefonoComprador;
     private String nombreVendedor;
     private String usuarioVendedor;
+    private String correoVendedor;
+    private String telefonoVendedor;
     private Integer idComprador;
     private Integer idVendedor;
     private String fotoComprador;

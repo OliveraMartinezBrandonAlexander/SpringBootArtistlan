@@ -7,11 +7,13 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
 import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.CompraObraRepository;
+import com.example.demo.repository.SolicitudCompraObraRepository;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalPagoService;
 import com.paypal.core.PayPalHttpClient;
 import com.paypal.http.HttpResponse;
+import com.paypal.http.exceptions.HttpException;
 import com.paypal.orders.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private final PayPalHttpClient payPalHttpClient;
     private final CarritoRepository carritoRepository;
     private final CompraObraRepository compraObraRepository;
+    private final SolicitudCompraObraRepository solicitudCompraObraRepository;
     private final ObraService obraService;
     private final NotificacionService notificacionService;
 
@@ -81,7 +84,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
                     .build();
 
         } catch (IOException e) {
-            throw new RuntimeException("Error al crear la orden en PayPal", e);
+            throw construirErrorPaypal("crear la orden", e);
         }
     }
 
@@ -122,8 +125,11 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             compra.setFechaCaptura(fechaCaptura);
             compraObraRepository.save(compra);
 
-            compra.getSolicitud().setEstadoSolicitud("PAGADA");
-            compra.getSolicitud().setFechaRespuesta(fechaCaptura);
+            Integer idSolicitud = compra.getSolicitud() != null ? compra.getSolicitud().getIdSolicitud() : null;
+            if (idSolicitud == null) {
+                throw new BusinessException("No se encontro solicitud asociada a la compra");
+            }
+            marcarSolicitudComoPagada(idSolicitud, fechaCaptura);
 
             obraService.marcarComoVendida(compra.getObra().getIdObra());
             carritoRepository.delete(carrito);
@@ -133,8 +139,8 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
                     "COMPRA_CONFIRMADA",
                     "Compra realizada",
                     "Tu compra de '" + compra.getObra().getTitulo() + "' fue confirmada.",
-                    "OBRA",
-                    compra.getObra().getIdObra()
+                    "TRANSACCION",
+                    compra.getIdCompra()
             );
 
             notificacionService.crearNotificacionUsuario(
@@ -159,7 +165,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         } catch (IOException e) {
             compra.setEstado(ESTADO_ERROR);
             compraObraRepository.save(compra);
-            throw new RuntimeException("Error al capturar la orden en PayPal", e);
+            throw construirErrorPaypal("capturar la orden", e);
         }
     }
 
@@ -269,6 +275,28 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         compraExistente.setFechaCreacion(LocalDateTime.now());
         compraExistente.setFechaCaptura(null);
         return compraExistente;
+    }
+
+    private void marcarSolicitudComoPagada(Integer idSolicitud, LocalDateTime fechaCaptura) {
+        solicitudCompraObraRepository.findById(idSolicitud).ifPresentOrElse(solicitud -> {
+            solicitud.setEstadoSolicitud("PAGADA");
+            solicitud.setFechaRespuesta(fechaCaptura);
+            solicitudCompraObraRepository.save(solicitud);
+        }, () -> {
+            throw new BusinessException("Solicitud no encontrada para finalizar pago: " + idSolicitud);
+        });
+    }
+
+    private BusinessException construirErrorPaypal(String accion, IOException e) {
+        String detalle = e.getMessage();
+        if (e instanceof HttpException httpException && httpException.getMessage() != null) {
+            detalle = httpException.getMessage();
+        }
+        if (detalle != null && detalle.length() > 350) {
+            detalle = detalle.substring(0, 350) + "...";
+        }
+        String sufijo = (detalle == null || detalle.isBlank()) ? "" : " Detalle: " + detalle;
+        return new BusinessException("No se pudo " + accion + " en PayPal." + sufijo);
     }
 }
 

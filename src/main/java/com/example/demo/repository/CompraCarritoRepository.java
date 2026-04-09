@@ -24,5 +24,5 @@ public interface CompraCarritoRepository extends JpaRepository<CompraCarrito, In
             """)
     Optional<CompraCarrito> findByPaypalOrderIdConDetalles(@Param("paypalOrderId") String paypalOrderId);
 
-    List<CompraCarrito> findByCompradorIdUsuarioAndEstadoNot(Integer idUsuarioComprador, String estado);
+    List<CompraCarrito> findByCompradorIdUsuarioAndEstadoIn(Integer idUsuarioComprador, List<String> estados);
 }

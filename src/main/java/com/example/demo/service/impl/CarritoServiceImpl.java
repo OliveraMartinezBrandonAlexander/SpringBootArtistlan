@@ -223,8 +223,8 @@ public class CarritoServiceImpl implements CarritoService {
                 "RESERVA_EXPIRADA",
                 "Reserva expirada",
                 "La reserva de '" + tituloObra + "' expiro y la obra volvio a En venta.",
-                null,
-                null
+                "CARRITO",
+                obra.getIdObra()
         );
 
         if (obra.getUsuario() != null) {
@@ -246,18 +246,20 @@ public class CarritoServiceImpl implements CarritoService {
         Obra obra = carrito.getObra();
         String tituloObra = obra.getTitulo() != null ? obra.getTitulo() : "la obra";
 
-        notificacionService.crearNotificacionSistema(
+        notificacionService.crearNotificacionUsuario(
+                carrito.getUsuario().getIdUsuario(),
                 carrito.getUsuario().getIdUsuario(),
                 "SOLICITUD_CANCELADA",
                 "Solicitud cancelada",
                 "Quitaste '" + tituloObra + "' del carrito. La reserva fue liberada.",
-                null,
-                null
+                "CARRITO",
+                obra.getIdObra()
         );
 
         if (obra.getUsuario() != null) {
-            notificacionService.crearNotificacionSistema(
+            notificacionService.crearNotificacionUsuario(
                     obra.getUsuario().getIdUsuario(),
+                    carrito.getUsuario().getIdUsuario(),
                     "RESERVA_LIBERADA",
                     "Reserva liberada",
                     "El comprador libero la reserva de '" + tituloObra + "' al quitarla del carrito.",

@@ -191,8 +191,10 @@ public class ObraServiceImpl implements ObraService {
             cancelarSolicitudesActivasDeObra(
                     obra.getIdObra(),
                     "Obra eliminada",
-                    "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada.",
-                    false);
+                    "Tu solicitud para '%s' fue eliminada porque la obra fue eliminada.",
+                    false,
+                    "SOLICITUD_ELIMINADA",
+                    "Solicitud eliminada");
             limpiarReferenciasCompraNoVendida(obra.getIdObra());
             eliminarSolicitudesDeObra(obra.getIdObra());
             categoriaObraRepository.deleteByObraIdObra(obraId);
@@ -217,8 +219,10 @@ public class ObraServiceImpl implements ObraService {
             cancelarSolicitudesActivasDeObra(
                     id,
                     "Obra eliminada",
-                    "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada.",
-                    false);
+                    "Tu solicitud para '%s' fue eliminada porque la obra fue eliminada.",
+                    false,
+                    "SOLICITUD_ELIMINADA",
+                    "Solicitud eliminada");
             limpiarReferenciasCompraNoVendida(id);
             eliminarSolicitudesDeObra(id);
             categoriaObraRepository.deleteByObraIdObra(id);
@@ -261,8 +265,10 @@ public class ObraServiceImpl implements ObraService {
                 cancelarSolicitudesActivasDeObra(
                         obra.getIdObra(),
                         "Obra eliminada por eliminacion de usuario",
-                        "Tu solicitud para '%s' fue cancelada porque el perfil del vendedor fue eliminado.",
-                        false);
+                        "Tu solicitud para '%s' fue eliminada porque el perfil del vendedor fue eliminado.",
+                        false,
+                        "SOLICITUD_ELIMINADA",
+                        "Solicitud eliminada");
                 limpiarReferenciasCompraNoVendida(obra.getIdObra());
                 eliminarSolicitudesDeObra(obra.getIdObra());
                 categoriaObraRepository.deleteByObraIdObra(obra.getIdObra());
@@ -366,6 +372,22 @@ public class ObraServiceImpl implements ObraService {
     }
 
     private void cancelarSolicitudesActivasDeObra(Integer obraId, String motivo, String mensajeNotificacion, boolean incluirReferenciaSolicitud) {
+        cancelarSolicitudesActivasDeObra(
+                obraId,
+                motivo,
+                mensajeNotificacion,
+                incluirReferenciaSolicitud,
+                "SOLICITUD_CANCELADA",
+                "Solicitud cancelada"
+        );
+    }
+
+    private void cancelarSolicitudesActivasDeObra(Integer obraId,
+                                                  String motivo,
+                                                  String mensajeNotificacion,
+                                                  boolean incluirReferenciaSolicitud,
+                                                  String tipoNotificacion,
+                                                  String tituloNotificacion) {
         List<SolicitudCompraObra> activas = solicitudRepository.findByObraIdObraAndEstadoSolicitudIn(
                 obraId,
                 List.of("PENDIENTE", "ACEPTADA")
@@ -389,8 +411,8 @@ public class ObraServiceImpl implements ObraService {
             String tituloObra = solicitud.getObra() != null ? solicitud.getObra().getTitulo() : "la obra";
             notificacionService.crearNotificacionSistema(
                     solicitud.getComprador().getIdUsuario(),
-                    "SOLICITUD_CANCELADA",
-                    "Solicitud cancelada",
+                    tipoNotificacion,
+                    tituloNotificacion,
                     String.format(mensajeNotificacion, tituloObra),
                     incluirReferenciaSolicitud ? "SOLICITUD" : null,
                     incluirReferenciaSolicitud ? solicitud.getIdSolicitud() : null
