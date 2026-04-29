@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
 import com.example.demo.dto.CambiarRolRequestDTO;
+import com.example.demo.dto.LoginResponse;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
 import com.example.demo.model.Categoria;
@@ -11,6 +12,8 @@ import com.example.demo.model.Usuario;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.FavoritosService;
+import com.example.demo.service.JwtService;
+import com.example.demo.service.TwoFactorService;
 import com.example.demo.service.UsuarioIdCategoriaService;
 import com.example.demo.service.UsuarioService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -40,6 +43,8 @@ public class UsuarioController {
     private final CategoriaRepository categoriaRepository;
     private final UsuarioIdCategoriaService usuarioIdCategoriaService;
     private final FavoritosService favoritosService;
+    private final TwoFactorService twoFactorService;
+    private final JwtService jwtService;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -142,9 +147,34 @@ public class UsuarioController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
         }
 
-        UsuarioDTO dto = convertirADTO(user.get(), null);
+        Usuario usuarioAutenticado = user.get();
+        boolean twoFactorEnabled = Boolean.TRUE.equals(usuarioAutenticado.getTwoFactorEnabled());
+
+        if (twoFactorEnabled) {
+            String temporaryToken = twoFactorService.crearTokenLoginYEnviarCodigo(usuarioAutenticado).getTemporaryToken();
+            LoginResponse response = LoginResponse.builder()
+                    .login(false)
+                    .requires2FA(true)
+                    .temporaryToken(temporaryToken)
+                    .token(null)
+                    .user(null)
+                    .build();
+            return ResponseEntity.ok(response);
+        }
+
+        UsuarioDTO dto = convertirADTO(usuarioAutenticado, null);
         dto.setContrasena(null);
-        return ResponseEntity.ok(dto);
+        String jwt = jwtService.generarToken(usuarioAutenticado);
+
+        LoginResponse response = LoginResponse.builder()
+                .login(true)
+                .requires2FA(false)
+                .temporaryToken(null)
+                .token(jwt)
+                .user(dto)
+                .build();
+        response.aplicarCamposLegacyDesdeUsuario(dto);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/existe")
@@ -206,6 +236,7 @@ public class UsuarioController {
                 .ubicacion(u.getUbicacion())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .rol(u.getRol())
+                .twoFactorEnabled(Boolean.TRUE.equals(u.getTwoFactorEnabled()))
                 .likes(favoritosService.likesPorArtista(u.getIdUsuario().longValue()))
                 .esFavorito(false)
                 .idCategoria(null)
@@ -247,6 +278,9 @@ public class UsuarioController {
         u.setRol(usuarioExistente != null && usuarioExistente.getRol() != null
                 ? usuarioExistente.getRol()
                 : "USER");
+        u.setTwoFactorEnabled(usuarioExistente != null
+                ? usuarioExistente.getTwoFactorEnabled()
+                : Boolean.TRUE.equals(dto.getTwoFactorEnabled()));
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());
         }

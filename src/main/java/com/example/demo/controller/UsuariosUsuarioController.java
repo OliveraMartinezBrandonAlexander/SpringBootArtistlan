@@ -67,6 +67,7 @@ public class UsuariosUsuarioController {
                 .redesSociales(u.getRedesSociales())
                 .ubicacion(u.getUbicacion())
                 .fechaNacimiento(u.getFechaNacimiento())
+                .twoFactorEnabled(Boolean.TRUE.equals(u.getTwoFactorEnabled()))
                 .build();
     }
 }

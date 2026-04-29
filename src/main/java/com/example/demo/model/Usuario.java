@@ -60,6 +60,10 @@ public class Usuario {
     @Builder.Default
     private String rol = "USER";
 
+    @Column(name = "two_factor_enabled")
+    @Builder.Default
+    private Boolean twoFactorEnabled = Boolean.FALSE;
+
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL)
     @JsonManagedReference
     private Set<CategoriaUsuarios> categoriasUsuarios = new HashSet<>();

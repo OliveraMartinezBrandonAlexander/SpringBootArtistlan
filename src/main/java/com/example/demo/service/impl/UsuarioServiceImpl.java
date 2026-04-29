@@ -223,6 +223,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setUbicacion(dto.getUbicacion());
         u.setFechaNacimiento(dto.getFechaNacimiento());
         u.setRol("USER");
+        u.setTwoFactorEnabled(Boolean.TRUE.equals(dto.getTwoFactorEnabled()));
         return u;
     }
 
@@ -244,6 +245,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setRol(usuarioExistente != null && usuarioExistente.getRol() != null
                 ? usuarioExistente.getRol()
                 : "USER");
+        u.setTwoFactorEnabled(usuarioExistente != null
+                ? usuarioExistente.getTwoFactorEnabled()
+                : Boolean.TRUE.equals(dto.getTwoFactorEnabled()));
 
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
             u.setContrasena(dto.getContrasena());

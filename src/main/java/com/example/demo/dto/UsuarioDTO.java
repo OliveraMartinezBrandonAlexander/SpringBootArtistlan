@@ -21,6 +21,7 @@ public class UsuarioDTO {
     private String ubicacion;
     private LocalDate fechaNacimiento;
     private String rol;
+    private Boolean twoFactorEnabled;
     private Integer likes;
     private Boolean esFavorito;
 
