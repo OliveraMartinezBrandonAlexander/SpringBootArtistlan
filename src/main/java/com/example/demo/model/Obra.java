@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.example.demo.enums.EstadoModeracion;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,6 +30,21 @@ public class Obra {
 
     @Column(name = "estado", nullable = false, length = 20)
     private String estado;
+
+    @Column(name = "oculta", nullable = false)
+    @Builder.Default
+    private Boolean oculta = Boolean.FALSE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_moderacion", nullable = false, length = 40)
+    @Builder.Default
+    private EstadoModeracion estadoModeracion = EstadoModeracion.SIN_REPORTES;
+
+    @Column(name = "motivo_oculta", columnDefinition = "TEXT")
+    private String motivoOculta;
+
+    @Column(name = "fecha_oculta")
+    private LocalDateTime fechaOculta;
 
     @Column(precision = 10, scale = 2)
     private BigDecimal precio;

@@ -1,26 +1,37 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.UsuarioDTO;
+import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
+import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
 import com.example.demo.model.Usuario;
 import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaUsuariosRepository;
-import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ObraService;
+import com.example.demo.service.ServicioService;
 import com.example.demo.service.UsuarioService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.LOCKED;
 
 @Service
 @Transactional
@@ -44,7 +55,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     private ObraService obraService;
 
     @Autowired
-    private ServicioRepository servicioRepository;
+    private ServicioService servicioService;
 
     @Override
     public Usuario guardarUsuario(Usuario u) {
@@ -109,18 +120,88 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Transactional
     @Override
     public boolean eliminarUsuario(Integer id) {
-
-        if (!repo.existsById(id)) {
+        Usuario usuario = repo.findById(id).orElse(null);
+        if (usuario == null) {
             return false;
         }
-
-        categoriaUsuariosRepository.deleteByUsuarioId(id);
-        obraService.eliminarPorUsuarioId(id);
-        servicioRepository.deleteByUsuarioId(id);
-
-        repo.deleteById(id);
-
+        desactivarUsuario(usuario, "Cuenta desactivada por solicitud del usuario");
         return true;
+    }
+
+    @Override
+    public Usuario validarCuentaPuedeAutenticarse(Usuario usuario) {
+        if (usuario == null) {
+            throw new ResponseStatusException(FORBIDDEN, "Usuario no encontrado");
+        }
+
+        if (usuario.getEstadoCuenta() == EstadoCuenta.SUSPENDIDO) {
+            LocalDateTime ahora = LocalDateTime.now();
+            if (usuario.getFechaFinSuspension() != null && !usuario.getFechaFinSuspension().isAfter(ahora)) {
+                usuario.setEstadoCuenta(EstadoCuenta.ACTIVO);
+                usuario.setMotivoSuspension(null);
+                usuario.setFechaSuspension(null);
+                usuario.setFechaFinSuspension(null);
+                return repo.save(usuario);
+            }
+
+            throw new ResponseStatusException(
+                    LOCKED,
+                    "Tu cuenta esta suspendida temporalmente. Intenta nuevamente cuando termine la suspension."
+            );
+        }
+
+        if (usuario.getEstadoCuenta() == EstadoCuenta.BLOQUEADO_PERMANENTE) {
+            throw new ResponseStatusException(
+                    FORBIDDEN,
+                    "Tu cuenta fue bloqueada permanentemente por moderacion."
+            );
+        }
+
+        if (usuario.getEstadoCuenta() == EstadoCuenta.DESACTIVADO) {
+            throw new ResponseStatusException(FORBIDDEN, "Tu cuenta esta desactivada.");
+        }
+
+        return usuario;
+    }
+
+    @Override
+    public RespuestaModeracionDTO desactivarCuenta(Integer idUsuario, DesactivarCuentaRequestDTO request) {
+        if (request == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "El request para desactivar cuenta es obligatorio");
+        }
+        if (idUsuario == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "idUsuario es obligatorio");
+        }
+        if (request.getIdUsuarioSolicitante() == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "idUsuarioSolicitante es obligatorio");
+        }
+        if (!Boolean.TRUE.equals(request.getConfirmacion())) {
+            throw new ResponseStatusException(BAD_REQUEST, "confirmacion debe ser true");
+        }
+
+        Usuario solicitante = repo.findById(request.getIdUsuarioSolicitante())
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario solicitante no encontrado"));
+
+        Usuario usuarioObjetivo = repo.findById(idUsuario)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario objetivo no encontrado"));
+
+        boolean esMismoUsuario = solicitante.getIdUsuario() != null
+                && solicitante.getIdUsuario().equals(usuarioObjetivo.getIdUsuario());
+        boolean esAdmin = "ADMIN".equalsIgnoreCase(solicitante.getRol());
+
+        if (!esMismoUsuario && !esAdmin) {
+            throw new ResponseStatusException(FORBIDDEN, "No tienes permisos para desactivar esta cuenta");
+        }
+
+        String motivo = normalizarMotivoDesactivacion(request.getMotivo());
+        desactivarUsuario(usuarioObjetivo, motivo);
+
+        return RespuestaModeracionDTO.builder()
+                .success(Boolean.TRUE)
+                .message("Cuenta desactivada correctamente")
+                .estadoCuentaUsuario(usuarioObjetivo.getEstadoCuenta())
+                .fecha(usuarioObjetivo.getFechaSuspension())
+                .build();
     }
 
     @Override
@@ -207,6 +288,34 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public List<Usuario> listarAdmins() {
         return repo.findAdmins();
+    }
+
+    private void desactivarUsuario(Usuario usuario, String motivo) {
+        if (usuario.getEstadoCuenta() == EstadoCuenta.DESACTIVADO) {
+            throw new ResponseStatusException(CONFLICT, "La cuenta ya se encuentra desactivada");
+        }
+        if (usuario.getEstadoCuenta() == EstadoCuenta.BLOQUEADO_PERMANENTE) {
+            throw new ResponseStatusException(CONFLICT, "No se permite la desactivacion voluntaria de una cuenta bloqueada permanentemente");
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        usuario.setEstadoCuenta(EstadoCuenta.DESACTIVADO);
+        usuario.setMotivoSuspension(motivo);
+        usuario.setFechaSuspension(ahora);
+        usuario.setFechaFinSuspension(null);
+
+        // TODO: en una fase posterior bloquear la desactivacion si existen compras, ventas o procesos activos.
+        obraService.eliminarPorUsuarioId(usuario.getIdUsuario());
+        servicioService.ocultarPorUsuarioId(usuario.getIdUsuario());
+
+        repo.save(usuario);
+    }
+
+    private String normalizarMotivoDesactivacion(String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            return "Cuenta desactivada por solicitud del usuario";
+        }
+        return motivo.trim();
     }
 
     private Usuario convertirAEntidad(UsuarioDTO dto) {

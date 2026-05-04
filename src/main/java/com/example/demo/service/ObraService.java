@@ -8,7 +8,9 @@ import java.util.Optional;
 public interface ObraService {
     Obra guardar(Obra o);
     List<Obra> listar();
+    List<Obra> listarPublicasVisibles();
     Optional<Obra> buscarPorId(Integer id);
+    Optional<Obra> buscarPublicaVisiblePorId(Integer id);
     Optional<Obra> actualizarObra(Integer id, Obra obra);
     boolean eliminar(Integer id);
     Optional<Obra> actualizarImagen1(Integer id, String urlImagen);

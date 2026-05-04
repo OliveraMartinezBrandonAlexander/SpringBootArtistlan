@@ -1,5 +1,6 @@
 package com.example.demo.repository;
 
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.model.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -24,4 +25,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Integer> {
 
     @Query("SELECT DISTINCT u FROM Usuario u LEFT JOIN FETCH u.categoriasUsuarios cu LEFT JOIN FETCH cu.categoria")
     List<Usuario> findAllConCategorias();
+
+    List<Usuario> findByRolInAndEstadoCuenta(List<String> roles, EstadoCuenta estadoCuenta);
 }

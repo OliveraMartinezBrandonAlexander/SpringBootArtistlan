@@ -1,6 +1,8 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.UsuarioDTO;
+import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
+import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
 import com.example.demo.model.Usuario;
 
 import java.util.List;
@@ -21,6 +23,10 @@ public interface UsuarioService {
     Optional<Usuario> actualizarUsuario(Integer id, Usuario datos);
 
     boolean eliminarUsuario(Integer id);
+
+    Usuario validarCuentaPuedeAutenticarse(Usuario usuario);
+
+    RespuestaModeracionDTO desactivarCuenta(Integer idUsuario, DesactivarCuentaRequestDTO request);
 
     List<Usuario> listarAdmins();
 

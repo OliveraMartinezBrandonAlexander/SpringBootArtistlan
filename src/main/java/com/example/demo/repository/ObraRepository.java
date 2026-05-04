@@ -1,5 +1,6 @@
 package com.example.demo.repository;
 
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.model.Obra;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -45,4 +46,12 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
     @Modifying
     @Query("DELETE FROM Obra o WHERE o.usuario.idUsuario = :id")
     void deleteByUsuarioId(@Param("id") Integer id);
+
+    List<Obra> findByOcultaFalseAndEstadoModeracionNotIn(List<EstadoModeracion> estadosModeracion);
+
+    Optional<Obra> findByIdObraAndOcultaFalseAndEstadoModeracionNotIn(Integer idObra,
+                                                                      List<EstadoModeracion> estadosModeracion);
+
+    List<Obra> findByUsuario_IdUsuarioAndOcultaFalseAndEstadoModeracionNotIn(Integer idUsuario,
+                                                                              List<EstadoModeracion> estadosModeracion);
 }

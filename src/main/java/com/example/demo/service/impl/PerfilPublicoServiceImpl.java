@@ -3,6 +3,8 @@ package com.example.demo.service.impl;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.dto.ServicioDTO;
 import com.example.demo.dto.publico.PerfilPublicoArtistaDTO;
+import com.example.demo.enums.EstadoCuenta;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.CategoriaServicios;
@@ -28,6 +30,11 @@ import java.util.TreeSet;
 @RequiredArgsConstructor
 public class PerfilPublicoServiceImpl implements PerfilPublicoService {
 
+    private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
+            EstadoModeracion.OCULTO,
+            EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
+
     private final UsuarioRepository usuarioRepository;
     private final ObraRepository obraRepository;
     private final ServicioRepository servicioRepository;
@@ -39,11 +46,22 @@ public class PerfilPublicoServiceImpl implements PerfilPublicoService {
         Usuario artista = usuarioRepository.findByIdConCategorias(idArtista)
                 .orElseThrow(() -> new ResourceNotFoundException("Artista no encontrado"));
 
-        List<ObraDTO> obras = obraRepository.findByUsuarioIdUsuario(idArtista).stream()
+        if (artista.getEstadoCuenta() == EstadoCuenta.DESACTIVADO
+                || artista.getEstadoCuenta() == EstadoCuenta.BLOQUEADO_PERMANENTE) {
+            throw new ResourceNotFoundException("Perfil publico no disponible");
+        }
+
+        List<ObraDTO> obras = obraRepository.findByUsuario_IdUsuarioAndOcultaFalseAndEstadoModeracionNotIn(
+                        idArtista,
+                        ESTADOS_NO_VISIBLES_PUBLICO
+                ).stream()
                 .map(obra -> mapObra(obra, usuarioConsulta))
                 .toList();
 
-        List<ServicioDTO> servicios = servicioRepository.findByUsuarioIdUsuario(idArtista).stream()
+        List<ServicioDTO> servicios = servicioRepository.findByUsuario_IdUsuarioAndOcultoFalseAndEstadoModeracionNotIn(
+                        idArtista,
+                        ESTADOS_NO_VISIBLES_PUBLICO
+                ).stream()
                 .map(servicio -> mapServicio(servicio, usuarioConsulta))
                 .toList();
 

@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.example.demo.enums.EstadoCuenta;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -7,6 +8,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -63,6 +65,20 @@ public class Usuario {
     @Column(name = "two_factor_enabled")
     @Builder.Default
     private Boolean twoFactorEnabled = Boolean.FALSE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_cuenta", nullable = false, length = 30)
+    @Builder.Default
+    private EstadoCuenta estadoCuenta = EstadoCuenta.ACTIVO;
+
+    @Column(name = "motivo_suspension", columnDefinition = "TEXT")
+    private String motivoSuspension;
+
+    @Column(name = "fecha_suspension")
+    private LocalDateTime fechaSuspension;
+
+    @Column(name = "fecha_fin_suspension")
+    private LocalDateTime fechaFinSuspension;
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL)
     @JsonManagedReference

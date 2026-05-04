@@ -5,6 +5,8 @@ import com.example.demo.dto.CambiarRolRequestDTO;
 import com.example.demo.dto.LoginResponse;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
+import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
+import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
@@ -27,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.*;
@@ -123,9 +126,15 @@ public class UsuarioController {
     }
 
     @DeleteMapping
-    public ResponseEntity<Void> eliminarTodos() {
-        usuarioService.todosUsuarios().forEach(u -> usuarioService.eliminarUsuario(u.getIdUsuario()));
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<String> eliminarTodos() {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body("No se permite la eliminacion masiva de usuarios por seguridad");
+    }
+
+    @PostMapping("/{idUsuario}/desactivar-cuenta")
+    public ResponseEntity<RespuestaModeracionDTO> desactivarCuenta(@PathVariable Integer idUsuario,
+                                                                   @RequestBody(required = false) DesactivarCuentaRequestDTO request) {
+        return ResponseEntity.ok(usuarioService.desactivarCuenta(idUsuario, request));
     }
 
     @GetMapping("/login")
@@ -148,6 +157,12 @@ public class UsuarioController {
         }
 
         Usuario usuarioAutenticado = user.get();
+        try {
+            usuarioAutenticado = usuarioService.validarCuentaPuedeAutenticarse(usuarioAutenticado);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
+        }
+
         boolean twoFactorEnabled = Boolean.TRUE.equals(usuarioAutenticado.getTwoFactorEnabled());
 
         if (twoFactorEnabled) {

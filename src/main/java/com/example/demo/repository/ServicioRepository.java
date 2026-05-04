@@ -1,5 +1,6 @@
 package com.example.demo.repository;
 
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.model.Servicio;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -48,4 +49,12 @@ public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
     @Modifying
     @Query("DELETE FROM Servicio s WHERE s.usuario.idUsuario = :id")
     void deleteByUsuarioId(@Param("id") Integer id);
+
+    List<Servicio> findByOcultoFalseAndEstadoModeracionNotIn(List<EstadoModeracion> estadosModeracion);
+
+    Optional<Servicio> findByIdServicioAndOcultoFalseAndEstadoModeracionNotIn(Integer idServicio,
+                                                                               List<EstadoModeracion> estadosModeracion);
+
+    List<Servicio> findByUsuario_IdUsuarioAndOcultoFalseAndEstadoModeracionNotIn(Integer idUsuario,
+                                                                                  List<EstadoModeracion> estadosModeracion);
 }

@@ -1,6 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ObraDTO;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
@@ -8,15 +9,17 @@ import com.example.demo.repository.*;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @AllArgsConstructor
@@ -29,6 +32,10 @@ public class ObraServiceImpl implements ObraService {
     private static final String ESTADO_TRANSACCION_COMPLETADA = "CAPTURADA";
     private static final int CATEGORIA_OBRA_MIN = 1;
     private static final int CATEGORIA_OBRA_MAX = 18;
+    private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
+            EstadoModeracion.OCULTO,
+            EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
 
     private final ObraRepository obraRepository;
     private final UsuarioRepository usuarioRepository;
@@ -52,8 +59,24 @@ public class ObraServiceImpl implements ObraService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Obra> listarPublicasVisibles() {
+        List<Obra> obras = obraRepository.findByOcultaFalseAndEstadoModeracionNotIn(ESTADOS_NO_VISIBLES_PUBLICO);
+        inicializarRelacionesPublicas(obras);
+        return obras;
+    }
+
+    @Override
     public Optional<Obra> buscarPorId(Integer id) {
         return obraRepository.findByIdConCategoria(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Obra> buscarPublicaVisiblePorId(Integer id) {
+        Optional<Obra> obra = obraRepository.findByIdObraAndOcultaFalseAndEstadoModeracionNotIn(id, ESTADOS_NO_VISIBLES_PUBLICO);
+        obra.ifPresent(this::inicializarRelacionPublica);
+        return obra;
     }
 
     @Override
@@ -185,24 +208,7 @@ public class ObraServiceImpl implements ObraService {
 
         validarPertenencia(obra, usuarioId);
         validarEstadoParaEliminar(obra);
-        validarSinVentaReal(obra.getIdObra());
-        try {
-            favoritosRepository.deleteByObraIdObra(obraId);
-            cancelarSolicitudesActivasDeObra(
-                    obra.getIdObra(),
-                    "Obra eliminada",
-                    "Tu solicitud para '%s' fue eliminada porque la obra fue eliminada.",
-                    false,
-                    "SOLICITUD_ELIMINADA",
-                    "Solicitud eliminada");
-            limpiarReferenciasCompraNoVendida(obra.getIdObra());
-            eliminarSolicitudesDeObra(obra.getIdObra());
-            categoriaObraRepository.deleteByObraIdObra(obraId);
-            obraRepository.deleteById(obraId);
-            obraRepository.flush();
-        } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
-        }
+        ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
     }
 
     @Override
@@ -213,24 +219,7 @@ public class ObraServiceImpl implements ObraService {
             return false;
         }
         validarEstadoParaEliminar(obra);
-        validarSinVentaReal(obra.getIdObra());
-        try {
-            favoritosRepository.deleteByObraIdObra(id);
-            cancelarSolicitudesActivasDeObra(
-                    id,
-                    "Obra eliminada",
-                    "Tu solicitud para '%s' fue eliminada porque la obra fue eliminada.",
-                    false,
-                    "SOLICITUD_ELIMINADA",
-                    "Solicitud eliminada");
-            limpiarReferenciasCompraNoVendida(id);
-            eliminarSolicitudesDeObra(id);
-            categoriaObraRepository.deleteByObraIdObra(id);
-            obraRepository.deleteById(id);
-            obraRepository.flush();
-        } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
-        }
+        ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
         return true;
     }
 
@@ -259,24 +248,11 @@ public class ObraServiceImpl implements ObraService {
     public void eliminarPorUsuarioId(Integer usuarioId) {
         List<Obra> obras = obraRepository.findByUsuarioIdUsuario(usuarioId);
         for (Obra obra : obras) {
-            validarSinVentaReal(obra.getIdObra());
-            try {
-                favoritosRepository.deleteByObraIdObra(obra.getIdObra());
-                cancelarSolicitudesActivasDeObra(
-                        obra.getIdObra(),
-                        "Obra eliminada por eliminacion de usuario",
-                        "Tu solicitud para '%s' fue eliminada porque el perfil del vendedor fue eliminado.",
-                        false,
-                        "SOLICITUD_ELIMINADA",
-                        "Solicitud eliminada");
-                limpiarReferenciasCompraNoVendida(obra.getIdObra());
-                eliminarSolicitudesDeObra(obra.getIdObra());
-                categoriaObraRepository.deleteByObraIdObra(obra.getIdObra());
-            } catch (DataIntegrityViolationException ex) {
-                throw new BusinessException("No se puede eliminar la obra porque tiene ventas reales registradas.");
+            String estado = normalizarEstado(obra.getEstado());
+            if (!ESTADO_RESERVADA.equals(estado) && !ESTADO_VENDIDA.equals(estado)) {
+                ocultarObraLogicamente(obra, "Obra ocultada por desactivacion de cuenta");
             }
         }
-        obraRepository.deleteByUsuarioIdUsuario(usuarioId);
     }
 
     @Override
@@ -336,7 +312,7 @@ public class ObraServiceImpl implements ObraService {
 
     private void validarPertenencia(Obra obra, Integer usuarioId) {
         if (obra.getUsuario() == null || !usuarioId.equals(obra.getUsuario().getIdUsuario())) {
-            throw new SecurityException("La obra no pertenece al usuario indicado");
+            throw new ResponseStatusException(FORBIDDEN, "La obra no pertenece al usuario indicado");
         }
     }
 
@@ -435,5 +411,33 @@ public class ObraServiceImpl implements ObraService {
 
     private void eliminarSolicitudesDeObra(Integer obraId) {
         solicitudRepository.deleteByObraIdObra(obraId);
+    }
+
+    private void inicializarRelacionesPublicas(List<Obra> obras) {
+        for (Obra obra : obras) {
+            inicializarRelacionPublica(obra);
+        }
+    }
+
+    private void inicializarRelacionPublica(Obra obra) {
+        if (obra == null) {
+            return;
+        }
+        if (obra.getUsuario() != null) {
+            obra.getUsuario().getIdUsuario();
+            obra.getUsuario().getUsuario();
+            obra.getUsuario().getFotoPerfil();
+        }
+        if (obra.getCategoriaObras() != null) {
+            obra.getCategoriaObras().size();
+        }
+    }
+
+    private void ocultarObraLogicamente(Obra obra, String motivo) {
+        obra.setOculta(Boolean.TRUE);
+        obra.setEstadoModeracion(EstadoModeracion.OCULTO);
+        obra.setMotivoOculta(motivo);
+        obra.setFechaOculta(LocalDateTime.now());
+        obraRepository.save(obra);
     }
 }

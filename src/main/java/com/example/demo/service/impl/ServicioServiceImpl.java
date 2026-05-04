@@ -1,6 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ServicioDTO;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaServicios;
@@ -11,17 +12,21 @@ import com.example.demo.repository.CategoriaRepository;
 import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.repository.FavoritosRepository;
 import com.example.demo.repository.ServicioRepository;
+import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ServicioService;
-import com.example.demo.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.regex.Pattern;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @RequiredArgsConstructor
@@ -32,9 +37,13 @@ public class ServicioServiceImpl implements ServicioService {
     private static final Pattern INSTAGRAM_PATTERN = Pattern.compile("^@?[A-Za-z0-9._]{1,30}$");
     private static final int CATEGORIA_SERVICIO_MIN = 19;
     private static final int CATEGORIA_SERVICIO_MAX = 37;
+    private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
+            EstadoModeracion.OCULTO,
+            EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
 
     private final ServicioRepository repo;
-    private final UsuarioService usuarioService;
+    private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
     private final CategoriaServiciosRepository categoriaServiciosRepository;
     private final FavoritosRepository favoritosRepository;
@@ -50,8 +59,24 @@ public class ServicioServiceImpl implements ServicioService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Servicio> listarServiciosPublicosVisibles() {
+        List<Servicio> servicios = repo.findByOcultoFalseAndEstadoModeracionNotIn(ESTADOS_NO_VISIBLES_PUBLICO);
+        inicializarRelacionesPublicas(servicios);
+        return servicios;
+    }
+
+    @Override
     public Optional<Servicio> buscarPorId(Integer id) {
         return repo.findByIdConCategoria(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Servicio> buscarServicioPublicoVisiblePorId(Integer id) {
+        Optional<Servicio> servicio = repo.findByIdServicioAndOcultoFalseAndEstadoModeracionNotIn(id, ESTADOS_NO_VISIBLES_PUBLICO);
+        servicio.ifPresent(this::inicializarRelacionPublica);
+        return servicio;
     }
 
     @Override
@@ -71,18 +96,27 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional
     public boolean eliminarServicio(Integer id) {
-        if (!repo.existsById(id)) {
+        Servicio servicio = repo.findById(id).orElse(null);
+        if (servicio == null) {
             return false;
         }
 
-        favoritosRepository.deleteByServicioIdServicio(id);
-        repo.deleteById(id);
+        ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
         return true;
     }
 
     @Override
     public List<Servicio> buscarPorUsuarioId(Integer usuarioId) {
         return repo.findByUsuarioIdUsuario(usuarioId);
+    }
+
+    @Override
+    @Transactional
+    public void ocultarPorUsuarioId(Integer usuarioId) {
+        List<Servicio> servicios = repo.findByUsuarioIdUsuario(usuarioId);
+        for (Servicio servicio : servicios) {
+            ocultarServicioLogicamente(servicio, "Servicio ocultado por desactivacion de cuenta");
+        }
     }
 
     @Override
@@ -130,14 +164,13 @@ public class ServicioServiceImpl implements ServicioService {
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
         validarPertenencia(servicio, usuarioId);
-        favoritosRepository.deleteByServicioIdServicio(idServicio);
-        repo.delete(servicio);
+        ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
     }
 
     @Override
     @Transactional
     public Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto) {
-        Usuario usuario = usuarioService.buscarPorId(usuarioId)
+        Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
 
         validarContacto(dto.getTipoContacto(), dto.getContacto());
@@ -186,7 +219,7 @@ public class ServicioServiceImpl implements ServicioService {
 
     private void validarPertenencia(Servicio servicio, Integer usuarioId) {
         if (servicio.getUsuario() == null || !usuarioId.equals(servicio.getUsuario().getIdUsuario())) {
-            throw new SecurityException("El servicio no pertenece al usuario indicado");
+            throw new ResponseStatusException(FORBIDDEN, "El servicio no pertenece al usuario indicado");
         }
     }
 
@@ -232,5 +265,33 @@ public class ServicioServiceImpl implements ServicioService {
         if (idCategoria < CATEGORIA_SERVICIO_MIN || idCategoria > CATEGORIA_SERVICIO_MAX) {
             throw new BusinessException("La categoria de servicio debe estar entre 19 y 37.");
         }
+    }
+
+    private void inicializarRelacionesPublicas(List<Servicio> servicios) {
+        for (Servicio servicio : servicios) {
+            inicializarRelacionPublica(servicio);
+        }
+    }
+
+    private void inicializarRelacionPublica(Servicio servicio) {
+        if (servicio == null) {
+            return;
+        }
+        if (servicio.getUsuario() != null) {
+            servicio.getUsuario().getIdUsuario();
+            servicio.getUsuario().getUsuario();
+            servicio.getUsuario().getFotoPerfil();
+        }
+        if (servicio.getCategoriasServicios() != null) {
+            servicio.getCategoriasServicios().size();
+        }
+    }
+
+    private void ocultarServicioLogicamente(Servicio servicio, String motivo) {
+        servicio.setOculto(Boolean.TRUE);
+        servicio.setEstadoModeracion(EstadoModeracion.OCULTO);
+        servicio.setMotivoOculto(motivo);
+        servicio.setFechaOculto(LocalDateTime.now());
+        repo.save(servicio);
     }
 }
