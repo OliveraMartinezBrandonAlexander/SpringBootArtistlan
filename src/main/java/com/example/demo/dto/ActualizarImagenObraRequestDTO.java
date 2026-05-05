@@ -3,14 +3,18 @@ package com.example.demo.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import jakarta.validation.constraints.Size;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class ActualizarImagenObraRequestDTO
 {
+    @Size(max = 1000)
     private String imagen1;
+    @Size(max = 1000)
     private String imagen2;
+    @Size(max = 1000)
     private String imagen3;
 
     public String getImagen1() {

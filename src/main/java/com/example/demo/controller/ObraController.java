@@ -6,6 +6,7 @@ import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -68,7 +69,7 @@ public class ObraController {
 
     @PutMapping("/{id}/imagen1")
     public ResponseEntity<Obra> actualizarImagen1(@PathVariable Integer id,
-                                                  @RequestBody ActualizarImagenObraRequestDTO requestDTO) {
+                                                  @Valid @RequestBody ActualizarImagenObraRequestDTO requestDTO) {
         return service.actualizarImagen1(id, requestDTO.getImagen1())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

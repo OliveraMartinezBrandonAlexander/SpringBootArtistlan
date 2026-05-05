@@ -49,13 +49,13 @@ public class Obra {
     @Column(precision = 10, scale = 2)
     private BigDecimal precio;
 
-    @Column(name = "imagen1", nullable = false, length = 500)
+    @Column(name = "imagen1", nullable = false, length = 1000)
     private String imagen1;
 
-    @Column(name = "imagen2", length = 500)
+    @Column(name = "imagen2", length = 1000)
     private String imagen2;
 
-    @Column(name = "imagen3", length = 500)
+    @Column(name = "imagen3", length = 1000)
     private String imagen3;
 
     @Column(name = "tecnicas", length = 255)

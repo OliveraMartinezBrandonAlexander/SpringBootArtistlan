@@ -42,7 +42,7 @@ public class Usuario {
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 
-    @Column(name = "foto_perfil", length = 500)
+    @Column(name = "foto_perfil", length =1000)
     private String fotoPerfil;
 
     @Column(name = "telefono", length = 20)

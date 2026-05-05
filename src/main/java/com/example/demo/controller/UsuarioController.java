@@ -25,6 +25,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -233,7 +234,7 @@ public class UsuarioController {
 
     @PutMapping("/{id}/foto-perfil")
     public ResponseEntity<UsuarioDTO> actualizarFotoPerfil(@PathVariable int id,
-                                                           @RequestBody ActualizarFotoPerfilRequestDTO body) {
+                                                           @Valid @RequestBody ActualizarFotoPerfilRequestDTO body) {
         Optional<Usuario> op = usuarioRepository.findById(id);
         if (op.isEmpty()) return ResponseEntity.notFound().build();
 
