@@ -52,6 +52,7 @@ public class ModeracionServiceImpl implements ModeracionService {
 
     private static final String ROL_ADMIN = "ADMIN";
     private static final String ROL_MODERADOR = "MODERADOR";
+    private static final String USUARIO_NO_DISPONIBLE = "Usuario no disponible";
     private static final EnumSet<EstadoModeracion> ESTADOS_REACTIVABLES_CONTENIDO = EnumSet.of(
             EstadoModeracion.OCULTO,
             EstadoModeracion.ELIMINADO_POR_MODERACION
@@ -205,7 +206,14 @@ public class ModeracionServiceImpl implements ModeracionService {
             throw new BusinessException("El reporte ya cuenta con una resolucion registrada");
         }
 
-        ejecutarAccionResolucion(reporte, moderador, request.getAccion(), motivoAccion, request.getFechaFinSuspension());
+        ejecutarAccionResolucion(
+                reporte,
+                moderador,
+                request.getAccion(),
+                motivoAccion,
+                request.getFechaFinSuspension(),
+                mensajeRespuesta
+        );
 
         reporte.setEstado(request.getAccion() == AccionResolucionReporte.DESCARTAR_REPORTE
                 ? EstadoReporte.DESCARTADO
@@ -221,7 +229,7 @@ public class ModeracionServiceImpl implements ModeracionService {
                 .accion(request.getAccion())
                 .build());
 
-        notificarReportanteSegunResolucion(reporteGuardado, request.getAccion());
+        notificarReportanteSegunResolucion(reporteGuardado, request.getAccion(), mensajeRespuesta);
 
         return RespuestaModeracionDTO.builder()
                 .success(Boolean.TRUE)
@@ -314,22 +322,23 @@ public class ModeracionServiceImpl implements ModeracionService {
                                           Usuario moderador,
                                           AccionResolucionReporte accion,
                                           String motivoAccion,
-                                          LocalDateTime fechaFinSuspension) {
+                                          LocalDateTime fechaFinSuspension,
+                                          String mensajeRespuesta) {
         switch (accion) {
             case DESCARTAR_REPORTE -> {
             }
-            case OCULTAR_CONTENIDO -> ocultarContenido(reporte, moderador, motivoAccion);
-            case REACTIVAR_CONTENIDO -> reactivarContenido(reporte, moderador, motivoAccion);
-            case ELIMINAR_CONTENIDO_LOGICO -> eliminarContenidoLogicamente(reporte, moderador, motivoAccion);
-            case ADVERTENCIA -> advertirUsuarioAfectado(reporte, moderador, motivoAccion);
-            case SUSPENDER_USUARIO -> suspenderUsuarioAfectado(reporte, moderador, motivoAccion, fechaFinSuspension);
-            case REACTIVAR_USUARIO -> reactivarUsuarioAfectado(reporte, moderador, motivoAccion);
-            case BLOQUEAR_USUARIO_PERMANENTE -> bloquearUsuarioAfectado(reporte, moderador, motivoAccion);
+            case OCULTAR_CONTENIDO -> ocultarContenido(reporte, moderador, motivoAccion, mensajeRespuesta);
+            case REACTIVAR_CONTENIDO -> reactivarContenido(reporte, moderador, motivoAccion, mensajeRespuesta);
+            case ELIMINAR_CONTENIDO_LOGICO -> eliminarContenidoLogicamente(reporte, moderador, motivoAccion, mensajeRespuesta);
+            case ADVERTENCIA -> advertirUsuarioAfectado(reporte, moderador, motivoAccion, mensajeRespuesta);
+            case SUSPENDER_USUARIO -> suspenderUsuarioAfectado(reporte, moderador, motivoAccion, fechaFinSuspension, mensajeRespuesta);
+            case REACTIVAR_USUARIO -> reactivarUsuarioAfectado(reporte, moderador, motivoAccion, mensajeRespuesta);
+            case BLOQUEAR_USUARIO_PERMANENTE -> bloquearUsuarioAfectado(reporte, moderador, motivoAccion, mensajeRespuesta);
             case SIN_ACCION -> throw new ResponseStatusException(BAD_REQUEST, "Debes seleccionar una accion valida para resolver el reporte");
         }
     }
 
-    private void ocultarContenido(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void ocultarContenido(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         LocalDateTime ahora = LocalDateTime.now();
 
         switch (reporte.getTipoObjetivo()) {
@@ -354,7 +363,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         obra.getUsuario(),
                         "CONTENIDO_OCULTO",
                         "Tu obra fue ocultada",
-                        "Tu obra fue ocultada por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaObraNotificacion(obra) + " fue ocultada.",
+                                mensajeRespuesta
+                        ),
                         "OBRA",
                         obra.getIdObra()
                 );
@@ -380,7 +392,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         servicio.getUsuario(),
                         "CONTENIDO_OCULTO",
                         "Tu servicio fue ocultado",
-                        "Tu servicio fue ocultado por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaServicioNotificacion(servicio) + " fue ocultado.",
+                                mensajeRespuesta
+                        ),
                         "SERVICIO",
                         servicio.getIdServicio()
                 );
@@ -389,7 +404,7 @@ public class ModeracionServiceImpl implements ModeracionService {
         }
     }
 
-    private void reactivarContenido(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void reactivarContenido(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         switch (reporte.getTipoObjetivo()) {
             case OBRA -> {
                 Obra obra = obtenerObraObjetivo(reporte);
@@ -418,7 +433,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         obra.getUsuario(),
                         "CONTENIDO_REACTIVADO",
                         "Tu obra fue reactivada",
-                        "Tu obra fue reactivada por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaObraNotificacion(obra) + " fue reactivada.",
+                                mensajeRespuesta
+                        ),
                         "OBRA",
                         obra.getIdObra()
                 );
@@ -450,7 +468,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         servicio.getUsuario(),
                         "CONTENIDO_REACTIVADO",
                         "Tu servicio fue reactivado",
-                        "Tu servicio fue reactivado por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaServicioNotificacion(servicio) + " fue reactivado.",
+                                mensajeRespuesta
+                        ),
                         "SERVICIO",
                         servicio.getIdServicio()
                 );
@@ -459,7 +480,7 @@ public class ModeracionServiceImpl implements ModeracionService {
         }
     }
 
-    private void eliminarContenidoLogicamente(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void eliminarContenidoLogicamente(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         LocalDateTime ahora = LocalDateTime.now();
 
         switch (reporte.getTipoObjetivo()) {
@@ -484,7 +505,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         obra.getUsuario(),
                         "CONTENIDO_ELIMINADO_LOGICO",
                         "Tu obra fue retirada",
-                        "Tu obra fue retirada por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaObraNotificacion(obra) + " fue retirada.",
+                                mensajeRespuesta
+                        ),
                         "OBRA",
                         obra.getIdObra()
                 );
@@ -510,7 +534,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                         servicio.getUsuario(),
                         "CONTENIDO_ELIMINADO_LOGICO",
                         "Tu servicio fue retirado",
-                        "Tu servicio fue retirado por moderacion.",
+                        agregarRespuestaModerador(
+                                obtenerReferenciaServicioNotificacion(servicio) + " fue retirado.",
+                                mensajeRespuesta
+                        ),
                         "SERVICIO",
                         servicio.getIdServicio()
                 );
@@ -519,7 +546,7 @@ public class ModeracionServiceImpl implements ModeracionService {
         }
     }
 
-    private void advertirUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void advertirUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         Usuario usuarioAfectado = obtenerUsuarioAfectadoParaSancion(reporte);
 
         suspensionUsuarioRepository.save(SuspensionUsuario.builder()
@@ -537,7 +564,7 @@ public class ModeracionServiceImpl implements ModeracionService {
                 usuarioAfectado,
                 "USUARIO_ADVERTIDO",
                 "Has recibido una advertencia",
-                "Tu cuenta ha recibido una advertencia por moderacion.",
+                agregarRespuestaModerador("Tu cuenta recibio una advertencia.", mensajeRespuesta),
                 "USUARIO",
                 usuarioAfectado.getIdUsuario()
         );
@@ -546,7 +573,8 @@ public class ModeracionServiceImpl implements ModeracionService {
     private void suspenderUsuarioAfectado(Reporte reporte,
                                           Usuario moderador,
                                           String motivoAccion,
-                                          LocalDateTime fechaFinSuspension) {
+                                          LocalDateTime fechaFinSuspension,
+                                          String mensajeRespuesta) {
         if (fechaFinSuspension == null) {
             throw new ResponseStatusException(BAD_REQUEST, "fechaFinSuspension es obligatoria para suspender usuario");
         }
@@ -581,13 +609,13 @@ public class ModeracionServiceImpl implements ModeracionService {
                 usuarioAfectado,
                 "USUARIO_SUSPENDIDO",
                 "Tu cuenta fue suspendida",
-                "Tu cuenta fue suspendida temporalmente por moderacion.",
+                agregarRespuestaModerador("Tu cuenta fue suspendida temporalmente.", mensajeRespuesta),
                 "USUARIO",
                 usuarioAfectado.getIdUsuario()
         );
     }
 
-    private void reactivarUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void reactivarUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         Usuario usuarioAfectado = obtenerUsuarioAfectadoParaSancion(reporte);
         if (usuarioAfectado.getEstadoCuenta() == EstadoCuenta.BLOQUEADO_PERMANENTE) {
             throw new BusinessException("No se puede reactivar un usuario bloqueado permanentemente");
@@ -617,13 +645,13 @@ public class ModeracionServiceImpl implements ModeracionService {
                 usuarioAfectado,
                 "USUARIO_REACTIVADO",
                 "Tu cuenta fue reactivada",
-                "Tu cuenta fue reactivada por moderacion.",
+                agregarRespuestaModerador("Tu cuenta fue reactivada.", mensajeRespuesta),
                 "USUARIO",
                 usuarioAfectado.getIdUsuario()
         );
     }
 
-    private void bloquearUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion) {
+    private void bloquearUsuarioAfectado(Reporte reporte, Usuario moderador, String motivoAccion, String mensajeRespuesta) {
         Usuario usuarioAfectado = obtenerUsuarioAfectadoParaSancion(reporte);
         if (usuarioAfectado.getEstadoCuenta() == EstadoCuenta.BLOQUEADO_PERMANENTE) {
             throw new BusinessException("El usuario ya se encuentra bloqueado permanentemente");
@@ -651,7 +679,7 @@ public class ModeracionServiceImpl implements ModeracionService {
                 usuarioAfectado,
                 "USUARIO_BLOQUEADO",
                 "Tu cuenta fue bloqueada",
-                "Tu cuenta fue bloqueada permanentemente por moderacion.",
+                agregarRespuestaModerador("Tu cuenta fue bloqueada permanentemente.", mensajeRespuesta),
                 "USUARIO",
                 usuarioAfectado.getIdUsuario()
         );
@@ -679,7 +707,9 @@ public class ModeracionServiceImpl implements ModeracionService {
         return usuarioAfectado;
     }
 
-    private void notificarReportanteSegunResolucion(Reporte reporte, AccionResolucionReporte accion) {
+    private void notificarReportanteSegunResolucion(Reporte reporte,
+                                                    AccionResolucionReporte accion,
+                                                    String mensajeRespuesta) {
         if (reporte.getUsuarioReportante() == null || reporte.getUsuarioReportante().getIdUsuario() == null) {
             return;
         }
@@ -689,7 +719,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                     reporte.getUsuarioReportante().getIdUsuario(),
                     "REPORTE_DESCARTADO",
                     "Tu reporte fue descartado",
-                    "Tu reporte fue revisado y descartado por moderacion.",
+                    agregarRespuestaModerador(
+                            "Tu reporte fue revisado y descartado.",
+                            mensajeRespuesta
+                    ),
                     "REPORTE",
                     reporte.getIdReporte()
             );
@@ -700,7 +733,10 @@ public class ModeracionServiceImpl implements ModeracionService {
                 reporte.getUsuarioReportante().getIdUsuario(),
                 "REPORTE_RESUELTO",
                 "Tu reporte fue resuelto",
-                "Tu reporte fue resuelto por moderacion.",
+                agregarRespuestaModerador(
+                        "Tu reporte fue revisado y resuelto.",
+                        mensajeRespuesta
+                ),
                 "REPORTE",
                 reporte.getIdReporte()
         );
@@ -751,13 +787,33 @@ public class ModeracionServiceImpl implements ModeracionService {
             case DESCARTAR_REPORTE -> "Reporte descartado correctamente";
             case OCULTAR_CONTENIDO -> "Reporte resuelto con ocultamiento de contenido";
             case REACTIVAR_CONTENIDO -> "Reporte resuelto con reactivacion de contenido";
-            case ELIMINAR_CONTENIDO_LOGICO -> "Reporte resuelto con eliminacion logica del contenido";
+            case ELIMINAR_CONTENIDO_LOGICO -> "Reporte resuelto con retiro de contenido";
             case ADVERTENCIA -> "Reporte resuelto con advertencia al usuario";
             case SUSPENDER_USUARIO -> "Reporte resuelto con suspension temporal del usuario";
             case REACTIVAR_USUARIO -> "Reporte resuelto con reactivacion del usuario";
             case BLOQUEAR_USUARIO_PERMANENTE -> "Reporte resuelto con bloqueo permanente del usuario";
             case SIN_ACCION -> "Accion invalida";
         };
+    }
+
+    private String obtenerReferenciaObraNotificacion(Obra obra) {
+        String titulo = obra != null ? normalizarTextoOpcional(obra.getTitulo()) : null;
+        if (titulo != null) {
+            return "Tu obra \"" + titulo + "\"";
+        }
+        return "Esta obra";
+    }
+
+    private String obtenerReferenciaServicioNotificacion(Servicio servicio) {
+        String titulo = servicio != null ? normalizarTextoOpcional(servicio.getTitulo()) : null;
+        if (titulo != null) {
+            return "Tu servicio \"" + titulo + "\"";
+        }
+        return "Este servicio";
+    }
+
+    private String agregarRespuestaModerador(String mensajeBase, String mensajeRespuesta) {
+        return mensajeBase + " Respuesta: " + mensajeRespuesta;
     }
 
     private ReporteResumenDTO toResumenDto(Reporte reporte) {
@@ -886,9 +942,9 @@ public class ModeracionServiceImpl implements ModeracionService {
 
     private String obtenerNombreVisible(Usuario usuario) {
         if (usuario == null) {
-            return null;
+            return USUARIO_NO_DISPONIBLE;
         }
-        return primerNoVacio(usuario.getNombreCompleto(), usuario.getUsuario(), usuario.getCorreo());
+        return primerNoVacio(usuario.getUsuario(), usuario.getNombreCompleto(), usuario.getCorreo(), USUARIO_NO_DISPONIBLE);
     }
 
     private String primerNoVacio(String... valores) {

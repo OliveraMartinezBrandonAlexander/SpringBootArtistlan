@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class DesactivarCuentaRequestDTO {
 
     private Integer idUsuarioSolicitante;
+    private String contrasenaActual;
     private String motivo;
     private Boolean confirmacion;
 }

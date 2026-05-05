@@ -37,6 +37,7 @@ import static org.springframework.http.HttpStatus.FORBIDDEN;
 @RequiredArgsConstructor
 public class ReporteServiceImpl implements ReporteService {
 
+    private static final String USUARIO_NO_DISPONIBLE = "Usuario no disponible";
     private static final List<EstadoReporte> ESTADOS_REPORTE_ACTIVO = List.of(
             EstadoReporte.PENDIENTE,
             EstadoReporte.EN_REVISION
@@ -127,6 +128,19 @@ public class ReporteServiceImpl implements ReporteService {
         if (reportante.getEstadoCuenta() != EstadoCuenta.ACTIVO) {
             throw new ResponseStatusException(FORBIDDEN, "El usuario reportante debe estar ACTIVO");
         }
+        if (esRolModeracion(reportante)) {
+            throw new ResponseStatusException(
+                    FORBIDDEN,
+                    "Los administradores y moderadores no pueden crear reportes desde el flujo de usuario."
+            );
+        }
+    }
+
+    private boolean esRolModeracion(Usuario usuario) {
+        if (usuario == null || usuario.getRol() == null) {
+            return false;
+        }
+        return "ADMIN".equalsIgnoreCase(usuario.getRol()) || "MODERADOR".equalsIgnoreCase(usuario.getRol());
     }
 
     private void validarObjetivoExacto(CrearReporteRequestDTO request) {
@@ -228,10 +242,21 @@ public class ReporteServiceImpl implements ReporteService {
         notificacionService.crearNotificacionModeradoresYAdminsActivos(
                 "REPORTE_RECIBIDO",
                 "Nuevo reporte recibido",
-                "Se ha recibido un nuevo reporte de tipo " + reporte.getTipoObjetivo() + ".",
+                obtenerMensajeNotificacionNuevoReporte(reporte),
                 "REPORTE",
                 reporte.getIdReporte()
         );
+    }
+
+    private String obtenerMensajeNotificacionNuevoReporte(Reporte reporte) {
+        if (reporte == null || reporte.getTipoObjetivo() == null) {
+            return "Se ha recibido un nuevo reporte.";
+        }
+        return switch (reporte.getTipoObjetivo()) {
+            case OBRA -> "Se ha recibido un reporte sobre una obra.";
+            case SERVICIO -> "Se ha recibido un reporte sobre un servicio.";
+            case USUARIO -> "Se ha recibido un reporte a un usuario.";
+        };
     }
 
     private void validarUsuarioExiste(Integer idUsuario) {
@@ -369,9 +394,9 @@ public class ReporteServiceImpl implements ReporteService {
 
     private String obtenerNombreVisible(Usuario usuario) {
         if (usuario == null) {
-            return null;
+            return USUARIO_NO_DISPONIBLE;
         }
-        return primerNoVacio(usuario.getNombreCompleto(), usuario.getUsuario(), usuario.getCorreo());
+        return primerNoVacio(usuario.getUsuario(), usuario.getNombreCompleto(), usuario.getCorreo(), USUARIO_NO_DISPONIBLE);
     }
 
     private String primerNoVacio(String... valores) {

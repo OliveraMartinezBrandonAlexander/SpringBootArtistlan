@@ -1,6 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ObraDTO;
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
@@ -19,12 +20,15 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @AllArgsConstructor
 public class ObraServiceImpl implements ObraService {
 
+    private static final String MENSAJE_OBRA_RETIRADA_MODIFICAR = "Esta obra fue retirada por moderacion y no puede modificarse.";
+    private static final String MENSAJE_OBRA_RETIRADA_ELIMINAR = "Esta obra fue retirada por moderacion y no puede eliminarse desde el portafolio.";
     private static final String ESTADO_EN_VENTA = "EN_VENTA";
     private static final String ESTADO_EN_EXHIBICION = "EN_EXHIBICION";
     private static final String ESTADO_RESERVADA = "RESERVADA";
@@ -35,6 +39,10 @@ public class ObraServiceImpl implements ObraService {
     private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
             EstadoModeracion.OCULTO,
             EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
+    private static final List<EstadoCuenta> ESTADOS_DUENO_NO_VISIBLES_PUBLICO = List.of(
+            EstadoCuenta.DESACTIVADO,
+            EstadoCuenta.BLOQUEADO_PERMANENTE
     );
 
     private final ObraRepository obraRepository;
@@ -61,7 +69,10 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional(readOnly = true)
     public List<Obra> listarPublicasVisibles() {
-        List<Obra> obras = obraRepository.findByOcultaFalseAndEstadoModeracionNotIn(ESTADOS_NO_VISIBLES_PUBLICO);
+        List<Obra> obras = obraRepository.findPublicasVisibles(
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO
+        );
         inicializarRelacionesPublicas(obras);
         return obras;
     }
@@ -74,7 +85,11 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Obra> buscarPublicaVisiblePorId(Integer id) {
-        Optional<Obra> obra = obraRepository.findByIdObraAndOcultaFalseAndEstadoModeracionNotIn(id, ESTADOS_NO_VISIBLES_PUBLICO);
+        Optional<Obra> obra = obraRepository.findPublicaVisiblePorId(
+                id,
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO
+        );
         obra.ifPresent(this::inicializarRelacionPublica);
         return obra;
     }
@@ -83,6 +98,7 @@ public class ObraServiceImpl implements ObraService {
     @Transactional
     public Optional<Obra> actualizarObra(Integer id, Obra obra) {
         return obraRepository.findById(id).map(existente -> {
+            validarNoRetiradaPorModeracionParaEditar(existente);
             validarEstadoParaEdicion(existente);
             String estadoActual = normalizarEstado(existente.getEstado());
             String estadoObjetivo = estadoActual;
@@ -143,6 +159,7 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obraExistente, usuarioId);
+        validarNoRetiradaPorModeracionParaEditar(obraExistente);
         validarEstadoParaEdicion(obraExistente);
 
         if (obraDTO.getTitulo() != null) {
@@ -207,6 +224,7 @@ public class ObraServiceImpl implements ObraService {
                 .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + obraId));
 
         validarPertenencia(obra, usuarioId);
+        validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
     }
@@ -218,6 +236,7 @@ public class ObraServiceImpl implements ObraService {
         if (obra == null) {
             return false;
         }
+        validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
         return true;
@@ -226,6 +245,7 @@ public class ObraServiceImpl implements ObraService {
     @Override
     public Optional<Obra> actualizarImagen1(Integer id, String urlImagen) {
         return obraRepository.findById(id).map(o -> {
+            validarNoRetiradaPorModeracionParaEditar(o);
             o.setImagen1(urlImagen);
             return obraRepository.save(o);
         });
@@ -234,7 +254,10 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional(readOnly = true)
     public List<Obra> buscarPorUsuarioId(Integer usuarioId) {
-        List<Obra> obras = obraRepository.findByUsuarioIdUsuario(usuarioId);
+        List<Obra> obras = obraRepository.findByUsuarioIdUsuarioAndEstadoModeracionNot(
+                usuarioId,
+                EstadoModeracion.ELIMINADO_POR_MODERACION
+        );
         for (Obra obra : obras) {
             if (obra.getCategoriaObras() != null) {
                 obra.getCategoriaObras().size();
@@ -327,6 +350,18 @@ public class ObraServiceImpl implements ObraService {
         String estado = normalizarEstado(obra.getEstado());
         if (ESTADO_RESERVADA.equals(estado) || ESTADO_VENDIDA.equals(estado)) {
             throw new BusinessException("La obra no puede eliminarse en estado " + obra.getEstado());
+        }
+    }
+
+    private void validarNoRetiradaPorModeracionParaEditar(Obra obra) {
+        if (obra != null && obra.getEstadoModeracion() == EstadoModeracion.ELIMINADO_POR_MODERACION) {
+            throw new ResponseStatusException(CONFLICT, MENSAJE_OBRA_RETIRADA_MODIFICAR);
+        }
+    }
+
+    private void validarNoRetiradaPorModeracionParaEliminar(Obra obra) {
+        if (obra != null && obra.getEstadoModeracion() == EstadoModeracion.ELIMINADO_POR_MODERACION) {
+            throw new ResponseStatusException(CONFLICT, MENSAJE_OBRA_RETIRADA_ELIMINAR);
         }
     }
 

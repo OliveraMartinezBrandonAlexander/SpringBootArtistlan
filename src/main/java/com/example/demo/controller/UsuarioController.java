@@ -7,6 +7,7 @@ import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
 import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
 import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
@@ -41,6 +42,11 @@ import java.util.stream.Collectors;
 @Validated
 public class UsuarioController {
 
+    private static final List<EstadoCuenta> ESTADOS_NO_PUBLICOS = List.of(
+            EstadoCuenta.DESACTIVADO,
+            EstadoCuenta.BLOQUEADO_PERMANENTE
+    );
+
     private final UsuarioService usuarioService;
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
@@ -55,7 +61,7 @@ public class UsuarioController {
 
     @GetMapping
     public ResponseEntity<List<UsuarioDTO>> obtenerTodos(@RequestParam(required = false) Long usuarioId) {
-        List<Usuario> usuarios = usuarioService.todosUsuarios();
+        List<Usuario> usuarios = usuarioRepository.findAllConCategoriasByEstadoCuentaNotIn(ESTADOS_NO_PUBLICOS);
         if (usuarios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<UsuarioDTO> dtos = usuarios.stream()

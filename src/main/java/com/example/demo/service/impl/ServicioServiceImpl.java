@@ -1,6 +1,7 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.ServicioDTO;
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.model.Categoria;
@@ -26,12 +27,15 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @RequiredArgsConstructor
 public class ServicioServiceImpl implements ServicioService {
 
+    private static final String MENSAJE_SERVICIO_RETIRADO_MODIFICAR = "Este servicio fue retirado por moderacion y no puede modificarse.";
+    private static final String MENSAJE_SERVICIO_RETIRADO_ELIMINAR = "Este servicio fue retirado por moderacion y no puede eliminarse desde el portafolio.";
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+\\-()\\s]{8,20}$");
     private static final Pattern INSTAGRAM_PATTERN = Pattern.compile("^@?[A-Za-z0-9._]{1,30}$");
@@ -40,6 +44,10 @@ public class ServicioServiceImpl implements ServicioService {
     private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
             EstadoModeracion.OCULTO,
             EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
+    private static final List<EstadoCuenta> ESTADOS_DUENO_NO_VISIBLES_PUBLICO = List.of(
+            EstadoCuenta.DESACTIVADO,
+            EstadoCuenta.BLOQUEADO_PERMANENTE
     );
 
     private final ServicioRepository repo;
@@ -61,7 +69,10 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional(readOnly = true)
     public List<Servicio> listarServiciosPublicosVisibles() {
-        List<Servicio> servicios = repo.findByOcultoFalseAndEstadoModeracionNotIn(ESTADOS_NO_VISIBLES_PUBLICO);
+        List<Servicio> servicios = repo.findPublicosVisibles(
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO
+        );
         inicializarRelacionesPublicas(servicios);
         return servicios;
     }
@@ -74,7 +85,11 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Servicio> buscarServicioPublicoVisiblePorId(Integer id) {
-        Optional<Servicio> servicio = repo.findByIdServicioAndOcultoFalseAndEstadoModeracionNotIn(id, ESTADOS_NO_VISIBLES_PUBLICO);
+        Optional<Servicio> servicio = repo.findPublicoVisiblePorId(
+                id,
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO
+        );
         servicio.ifPresent(this::inicializarRelacionPublica);
         return servicio;
     }
@@ -83,6 +98,7 @@ public class ServicioServiceImpl implements ServicioService {
     @Transactional
     public Optional<Servicio> actualizarServicio(Integer id, Servicio servicioActualizado) {
         return repo.findById(id).map(existente -> {
+            validarNoRetiradoPorModeracionParaEditar(existente);
             existente.setTitulo(servicioActualizado.getTitulo());
             existente.setDescripcion(servicioActualizado.getDescripcion());
             existente.setTipoContacto(servicioActualizado.getTipoContacto());
@@ -101,13 +117,17 @@ public class ServicioServiceImpl implements ServicioService {
             return false;
         }
 
+        validarNoRetiradoPorModeracionParaEliminar(servicio);
         ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
         return true;
     }
 
     @Override
     public List<Servicio> buscarPorUsuarioId(Integer usuarioId) {
-        return repo.findByUsuarioIdUsuario(usuarioId);
+        return repo.findByUsuarioIdUsuarioAndEstadoModeracionNot(
+                usuarioId,
+                EstadoModeracion.ELIMINADO_POR_MODERACION
+        );
     }
 
     @Override
@@ -126,6 +146,7 @@ public class ServicioServiceImpl implements ServicioService {
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
         validarPertenencia(existente, usuarioId);
+        validarNoRetiradoPorModeracionParaEditar(existente);
 
         if (dto.getTitulo() != null) {
             existente.setTitulo(dto.getTitulo());
@@ -164,6 +185,7 @@ public class ServicioServiceImpl implements ServicioService {
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
         validarPertenencia(servicio, usuarioId);
+        validarNoRetiradoPorModeracionParaEliminar(servicio);
         ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
     }
 
@@ -264,6 +286,18 @@ public class ServicioServiceImpl implements ServicioService {
     private void validarCategoriaServicio(Integer idCategoria) {
         if (idCategoria < CATEGORIA_SERVICIO_MIN || idCategoria > CATEGORIA_SERVICIO_MAX) {
             throw new BusinessException("La categoria de servicio debe estar entre 19 y 37.");
+        }
+    }
+
+    private void validarNoRetiradoPorModeracionParaEditar(Servicio servicio) {
+        if (servicio != null && servicio.getEstadoModeracion() == EstadoModeracion.ELIMINADO_POR_MODERACION) {
+            throw new ResponseStatusException(CONFLICT, MENSAJE_SERVICIO_RETIRADO_MODIFICAR);
+        }
+    }
+
+    private void validarNoRetiradoPorModeracionParaEliminar(Servicio servicio) {
+        if (servicio != null && servicio.getEstadoModeracion() == EstadoModeracion.ELIMINADO_POR_MODERACION) {
+            throw new ResponseStatusException(CONFLICT, MENSAJE_SERVICIO_RETIRADO_ELIMINAR);
         }
     }
 

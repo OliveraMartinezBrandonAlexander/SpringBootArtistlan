@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -192,6 +193,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         if (!esMismoUsuario && !esAdmin) {
             throw new ResponseStatusException(FORBIDDEN, "No tienes permisos para desactivar esta cuenta");
         }
+        validarContrasenaActualSiAplica(request, solicitante, esMismoUsuario);
 
         String motivo = normalizarMotivoDesactivacion(request.getMotivo());
         desactivarUsuario(usuarioObjetivo, motivo);
@@ -288,6 +290,20 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public List<Usuario> listarAdmins() {
         return repo.findAdmins();
+    }
+
+    private void validarContrasenaActualSiAplica(DesactivarCuentaRequestDTO request,
+                                                 Usuario solicitante,
+                                                 boolean esMismoUsuario) {
+        if (!esMismoUsuario) {
+            return;
+        }
+        if (request.getContrasenaActual() == null || request.getContrasenaActual().isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "contrasenaActual es obligatoria para desactivar tu cuenta");
+        }
+        if (!Objects.equals(solicitante.getContrasena(), request.getContrasenaActual())) {
+            throw new ResponseStatusException(FORBIDDEN, "La contrasena actual es incorrecta.");
+        }
     }
 
     private void desactivarUsuario(Usuario usuario, String motivo) {
