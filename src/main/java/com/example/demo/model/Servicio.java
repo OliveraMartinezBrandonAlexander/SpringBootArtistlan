@@ -1,9 +1,11 @@
 package com.example.demo.model;
 
+import com.example.demo.enums.EstadoModeracion;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -32,6 +34,21 @@ public class Servicio {
 
     @Column(name = "contacto", nullable = false, length = 150)
     private String contacto;
+
+    @Column(name = "oculto", nullable = false)
+    @Builder.Default
+    private Boolean oculto = Boolean.FALSE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_moderacion", nullable = false, length = 40)
+    @Builder.Default
+    private EstadoModeracion estadoModeracion = EstadoModeracion.SIN_REPORTES;
+
+    @Column(name = "motivo_oculto", columnDefinition = "TEXT")
+    private String motivoOculto;
+
+    @Column(name = "fecha_oculto")
+    private LocalDateTime fechaOculto;
 
     @Column(name = "tecnicas", length = 255)
     private String tecnicas;

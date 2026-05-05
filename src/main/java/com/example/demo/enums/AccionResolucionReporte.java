@@ -1,0 +1,13 @@
+package com.example.demo.enums;
+
+public enum AccionResolucionReporte {
+    SIN_ACCION,
+    DESCARTAR_REPORTE,
+    ADVERTENCIA,
+    OCULTAR_CONTENIDO,
+    REACTIVAR_CONTENIDO,
+    ELIMINAR_CONTENIDO_LOGICO,
+    SUSPENDER_USUARIO,
+    REACTIVAR_USUARIO,
+    BLOQUEAR_USUARIO_PERMANENTE
+}

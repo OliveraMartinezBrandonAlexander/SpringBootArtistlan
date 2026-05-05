@@ -14,4 +14,5 @@ public interface NotificacionService {
 
     void crearNotificacionSistema(Integer idDestino, String tipoNotificacion, String titulo, String mensaje, String referenciaTipo, Integer referenciaId);
     void crearNotificacionUsuario(Integer idDestino, Integer idOrigen, String tipoNotificacion, String titulo, String mensaje, String referenciaTipo, Integer referenciaId);
+    void crearNotificacionModeradoresYAdminsActivos(String tipoNotificacion, String titulo, String mensaje, String referenciaTipo, Integer referenciaId);
 }

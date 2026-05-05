@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.dto.notificacion.NotificacionDTO;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.Notificacion;
@@ -118,6 +119,27 @@ public class NotificacionServiceImpl implements NotificacionService {
                 .referenciaTipo(referenciaTipo)
                 .referenciaId(referenciaId)
                 .build());
+    }
+
+    @Override
+    @Transactional
+    public void crearNotificacionModeradoresYAdminsActivos(String tipoNotificacion, String titulo, String mensaje, String referenciaTipo, Integer referenciaId) {
+        List<Usuario> destinos = usuarioRepository.findByRolInAndEstadoCuenta(List.of("ADMIN", "MODERADOR"), EstadoCuenta.ACTIVO);
+        if (destinos.isEmpty()) {
+            return;
+        }
+
+        for (Usuario destino : destinos) {
+            notificacionRepository.save(Notificacion.builder()
+                    .usuarioDestino(destino)
+                    .tipoOrigen("SISTEMA")
+                    .tipoNotificacion(tipoNotificacion)
+                    .titulo(titulo)
+                    .mensaje(mensaje)
+                    .referenciaTipo(referenciaTipo)
+                    .referenciaId(referenciaId)
+                    .build());
+        }
     }
 
     private NotificacionDTO toDto(Notificacion notificacion) {

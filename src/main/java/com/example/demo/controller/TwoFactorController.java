@@ -13,6 +13,7 @@ import com.example.demo.service.FavoritosService;
 import com.example.demo.service.JwtService;
 import com.example.demo.service.TwoFactorService;
 import com.example.demo.service.UsuarioIdCategoriaService;
+import com.example.demo.service.UsuarioService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,7 @@ public class TwoFactorController {
     private final UsuarioRepository usuarioRepository;
     private final UsuarioIdCategoriaService usuarioIdCategoriaService;
     private final FavoritosService favoritosService;
+    private final UsuarioService usuarioService;
 
     @PostMapping("/verify-login")
     public ResponseEntity<TwoFactorResponse> verifyLogin(@Valid @RequestBody TwoFactorVerifyLoginRequest request) {
@@ -39,6 +41,7 @@ public class TwoFactorController {
 
         Usuario usuario = usuarioRepository.findByIdConCategorias(token2fa.getUsuario().getIdUsuario())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+        usuario = usuarioService.validarCuentaPuedeAutenticarse(usuario);
 
         String jwt = jwtService.generarToken(usuario);
         UsuarioDTO dto = convertirADTO(usuario);

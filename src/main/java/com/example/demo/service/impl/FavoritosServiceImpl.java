@@ -1,6 +1,8 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.dto.FavoritosDTO;
+import com.example.demo.enums.EstadoCuenta;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.model.Favoritos;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Servicio;
@@ -22,6 +24,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FavoritosServiceImpl implements FavoritosService {
 
+    private static final String MENSAJE_CONTENIDO_NO_DISPONIBLE = "Este contenido ya no esta disponible para favoritos.";
+    private static final List<EstadoModeracion> ESTADOS_CONTENIDO_NO_VISIBLE = List.of(
+            EstadoModeracion.OCULTO,
+            EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
+
     private final FavoritosRepository favoritosRepository;
     private final UsuarioRepository usuarioRepository;
     private final ObraRepository obraRepository;
@@ -40,12 +48,14 @@ public class FavoritosServiceImpl implements FavoritosService {
         if (dto.getIdObra() != null) {
             Obra obra = obraRepository.findById(dto.getIdObra())
                     .orElseThrow(() -> new EntityNotFoundException("Obra no encontrada: " + dto.getIdObra()));
+            validarObraDisponibleParaFavoritos(obra);
             favorito.setObra(obra);
         }
 
         if (dto.getIdServicio() != null) {
             Servicio servicio = servicioRepository.findById(dto.getIdServicio())
                     .orElseThrow(() -> new EntityNotFoundException("Servicio no encontrado: " + dto.getIdServicio()));
+            validarServicioDisponibleParaFavoritos(servicio);
             favorito.setServicio(servicio);
         }
 
@@ -150,5 +160,35 @@ public class FavoritosServiceImpl implements FavoritosService {
         if (noNulos != 1) {
             throw new IllegalArgumentException("Debe enviar exactamente uno");
         }
+    }
+
+    private void validarObraDisponibleParaFavoritos(Obra obra) {
+        if (obra == null) {
+            return;
+        }
+        if (!Boolean.FALSE.equals(obra.getOculta())
+                || ESTADOS_CONTENIDO_NO_VISIBLE.contains(obra.getEstadoModeracion())
+                || !esUsuarioVisiblePublicamente(obra.getUsuario())) {
+            throw new IllegalStateException(MENSAJE_CONTENIDO_NO_DISPONIBLE);
+        }
+    }
+
+    private void validarServicioDisponibleParaFavoritos(Servicio servicio) {
+        if (servicio == null) {
+            return;
+        }
+        if (!Boolean.FALSE.equals(servicio.getOculto())
+                || ESTADOS_CONTENIDO_NO_VISIBLE.contains(servicio.getEstadoModeracion())
+                || !esUsuarioVisiblePublicamente(servicio.getUsuario())) {
+            throw new IllegalStateException(MENSAJE_CONTENIDO_NO_DISPONIBLE);
+        }
+    }
+
+    private boolean esUsuarioVisiblePublicamente(Usuario usuario) {
+        if (usuario == null || usuario.getEstadoCuenta() == null) {
+            return false;
+        }
+        return usuario.getEstadoCuenta() != EstadoCuenta.DESACTIVADO
+                && usuario.getEstadoCuenta() != EstadoCuenta.BLOQUEADO_PERMANENTE;
     }
 }

@@ -21,7 +21,7 @@ public class ServicioController {
 
     @GetMapping
     public ResponseEntity<List<ServicioDTO>> obtenerTodos(@RequestParam(required = false) Integer usuarioId) {
-        List<Servicio> servicios = service.todosServicios();
+        List<Servicio> servicios = service.listarServiciosPublicosVisibles();
         if (servicios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<ServicioDTO> dtos = servicios.stream()
@@ -34,7 +34,7 @@ public class ServicioController {
     @GetMapping("/{id}")
     public ResponseEntity<ServicioDTO> obtenerPorId(@PathVariable Integer id,
                                                     @RequestParam(required = false) Integer usuarioId) {
-        return service.buscarPorId(id)
+        return service.buscarServicioPublicoVisiblePorId(id)
                 .map(s -> ResponseEntity.ok(convertirADTO(s, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }

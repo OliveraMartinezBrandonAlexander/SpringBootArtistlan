@@ -1,5 +1,7 @@
 package com.example.demo.repository;
 
+import com.example.demo.enums.EstadoCuenta;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.model.Obra;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,6 +21,17 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
             WHERE o.usuario.idUsuario = :idUsuario
             """)
     List<Obra> findByUsuarioIdUsuario(@Param("idUsuario") Integer idUsuario);
+
+    @Query("""
+            SELECT DISTINCT o
+            FROM Obra o
+            LEFT JOIN FETCH o.categoriaObras co
+            LEFT JOIN FETCH co.categoria
+            WHERE o.usuario.idUsuario = :idUsuario
+              AND o.estadoModeracion <> :estadoModeracion
+            """)
+    List<Obra> findByUsuarioIdUsuarioAndEstadoModeracionNot(@Param("idUsuario") Integer idUsuario,
+                                                            @Param("estadoModeracion") EstadoModeracion estadoModeracion);
 
     @Query("""
             SELECT DISTINCT o
@@ -45,4 +58,35 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
     @Modifying
     @Query("DELETE FROM Obra o WHERE o.usuario.idUsuario = :id")
     void deleteByUsuarioId(@Param("id") Integer id);
+
+    @Query("""
+            SELECT DISTINCT o
+            FROM Obra o
+            JOIN FETCH o.usuario u
+            LEFT JOIN FETCH o.categoriaObras co
+            LEFT JOIN FETCH co.categoria
+            WHERE o.oculta = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+            """)
+    List<Obra> findPublicasVisibles(@Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+                                    @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta);
+
+    @Query("""
+            SELECT DISTINCT o
+            FROM Obra o
+            JOIN FETCH o.usuario u
+            LEFT JOIN FETCH o.categoriaObras co
+            LEFT JOIN FETCH co.categoria
+            WHERE o.idObra = :idObra
+              AND o.oculta = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+            """)
+    Optional<Obra> findPublicaVisiblePorId(@Param("idObra") Integer idObra,
+                                           @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+                                           @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta);
+
+    List<Obra> findByUsuario_IdUsuarioAndOcultaFalseAndEstadoModeracionNotIn(Integer idUsuario,
+                                                                              List<EstadoModeracion> estadosModeracion);
 }

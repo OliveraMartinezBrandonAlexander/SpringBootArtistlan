@@ -26,7 +26,7 @@ public class ObraController {
 
     @GetMapping
     public ResponseEntity<List<ObraDTO>> obtenerTodas(@RequestParam(required = false) Integer usuarioId) {
-        List<Obra> obras = service.listar();
+        List<Obra> obras = service.listarPublicasVisibles();
         if (obras.isEmpty()) return ResponseEntity.noContent().build();
 
         List<ObraDTO> dtos = obras.stream()
@@ -39,7 +39,7 @@ public class ObraController {
     @GetMapping("/{id}")
     public ResponseEntity<ObraDTO> obtenerPorId(@PathVariable Integer id,
                                                 @RequestParam(required = false) Integer usuarioId) {
-        return service.buscarPorId(id)
+        return service.buscarPublicaVisiblePorId(id)
                 .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }

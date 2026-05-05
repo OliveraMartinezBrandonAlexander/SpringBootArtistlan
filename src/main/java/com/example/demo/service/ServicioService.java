@@ -12,7 +12,11 @@ public interface ServicioService {
 
     List<Servicio> todosServicios();
 
+    List<Servicio> listarServiciosPublicosVisibles();
+
     Optional<Servicio> buscarPorId(Integer id);
+
+    Optional<Servicio> buscarServicioPublicoVisiblePorId(Integer id);
 
     Optional<Servicio> actualizarServicio(Integer id, Servicio servicio);
 
@@ -23,6 +27,8 @@ public interface ServicioService {
     void eliminarServicioDeUsuario(Integer usuarioId, Integer idServicio);
 
     List<Servicio> buscarPorUsuarioId(Integer usuarioId);
+
+    void ocultarPorUsuarioId(Integer usuarioId);
 
     Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto);
 }
