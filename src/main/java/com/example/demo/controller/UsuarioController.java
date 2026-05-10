@@ -1,7 +1,9 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
+import com.example.demo.dto.AuthErrorResponseDTO;
 import com.example.demo.dto.CambiarRolRequestDTO;
+import com.example.demo.dto.LoginRequestDTO;
 import com.example.demo.dto.LoginResponse;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
@@ -25,7 +27,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -144,59 +146,9 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarioService.desactivarCuenta(idUsuario, request));
     }
 
-    @GetMapping("/login")
-    public ResponseEntity<?> login(@RequestParam(required = false) String usuario,
-                                   @RequestParam(required = false) String correo,
-                                   @RequestParam String contrasena) {
-
-        Optional<Usuario> user = Optional.empty();
-
-        if (usuario != null && !usuario.isEmpty()) {
-            user = usuarioRepository.findByUsuarioAndContrasena(usuario, contrasena);
-        } else if (correo != null && !correo.isEmpty()) {
-            user = usuarioRepository.findByCorreoAndContrasena(correo, contrasena);
-        } else {
-            return ResponseEntity.badRequest().body("Falta usuario o correo");
-        }
-
-        if (user.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
-        }
-
-        Usuario usuarioAutenticado = user.get();
-        try {
-            usuarioAutenticado = usuarioService.validarCuentaPuedeAutenticarse(usuarioAutenticado);
-        } catch (ResponseStatusException e) {
-            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
-        }
-
-        boolean twoFactorEnabled = Boolean.TRUE.equals(usuarioAutenticado.getTwoFactorEnabled());
-
-        if (twoFactorEnabled) {
-            String temporaryToken = twoFactorService.crearTokenLoginYEnviarCodigo(usuarioAutenticado).getTemporaryToken();
-            LoginResponse response = LoginResponse.builder()
-                    .login(false)
-                    .requires2FA(true)
-                    .temporaryToken(temporaryToken)
-                    .token(null)
-                    .user(null)
-                    .build();
-            return ResponseEntity.ok(response);
-        }
-
-        UsuarioDTO dto = convertirADTO(usuarioAutenticado, null);
-        dto.setContrasena(null);
-        String jwt = jwtService.generarToken(usuarioAutenticado);
-
-        LoginResponse response = LoginResponse.builder()
-                .login(true)
-                .requires2FA(false)
-                .temporaryToken(null)
-                .token(jwt)
-                .user(dto)
-                .build();
-        response.aplicarCamposLegacyDesdeUsuario(dto);
-        return ResponseEntity.ok(response);
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequestDTO request) {
+        return autenticar(request);
     }
 
     @GetMapping("/existe")
@@ -249,7 +201,7 @@ public class UsuarioController {
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
                 .usuario(u.getUsuario())
-                .contrasena(u.getContrasena())
+                .contrasena(null)
                 .correo(u.getCorreo())
                 .descripcion(u.getDescripcion())
                 .fotoPerfil(u.getFotoPerfil())
@@ -308,5 +260,77 @@ public class UsuarioController {
         }
 
         return u;
+    }
+
+    private ResponseEntity<?> autenticar(LoginRequestDTO request) {
+        if (request == null
+                || request.getUsuarioOCorreo() == null
+                || request.getUsuarioOCorreo().isBlank()
+                || request.getContrasena() == null
+                || request.getContrasena().isBlank()) {
+            return ResponseEntity.badRequest().body("usuarioOCorreo y contrasena son obligatorios");
+        }
+
+        Optional<Usuario> user = usuarioService.buscarPorUsuarioOCorreo(request.getUsuarioOCorreo());
+        if (user.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
+        }
+
+        Usuario usuarioAutenticado = user.get();
+        boolean passwordValido = usuarioService.validarContrasena(
+                usuarioAutenticado,
+                request.getContrasena()
+        );
+        if (!passwordValido) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas");
+        }
+
+        try {
+            usuarioAutenticado = usuarioService.validarCuentaPuedeAutenticarse(usuarioAutenticado);
+        } catch (ResponseStatusException e) {
+            return construirRespuestaErrorAuth(usuarioAutenticado, e);
+        }
+
+        boolean twoFactorEnabled = Boolean.TRUE.equals(usuarioAutenticado.getTwoFactorEnabled());
+        if (twoFactorEnabled) {
+            String temporaryToken = twoFactorService.crearTokenLoginYEnviarCodigo(usuarioAutenticado).getTemporaryToken();
+            LoginResponse response = LoginResponse.builder()
+                    .login(false)
+                    .requires2FA(true)
+                    .temporaryToken(temporaryToken)
+                    .token(null)
+                    .user(null)
+                    .build();
+            return ResponseEntity.ok(response);
+        }
+
+        UsuarioDTO dto = convertirADTO(usuarioAutenticado, null);
+        dto.setContrasena(null);
+        String jwt = jwtService.generarToken(usuarioAutenticado);
+
+        LoginResponse response = LoginResponse.builder()
+                .login(true)
+                .requires2FA(false)
+                .temporaryToken(null)
+                .token(jwt)
+                .user(dto)
+                .build();
+        response.aplicarCamposLegacyDesdeUsuario(dto);
+        return ResponseEntity.ok(response);
+    }
+
+    private ResponseEntity<AuthErrorResponseDTO> construirRespuestaErrorAuth(Usuario usuario, ResponseStatusException ex) {
+        String estadoCuenta = usuario != null && usuario.getEstadoCuenta() != null
+                ? usuario.getEstadoCuenta().name()
+                : null;
+        LocalDateTime fechaFin = usuario != null ? usuario.getFechaFinSuspension() : null;
+
+        AuthErrorResponseDTO body = AuthErrorResponseDTO.builder()
+                .message(ex.getReason() != null ? ex.getReason() : "No fue posible autenticar la cuenta")
+                .estadoCuenta(estadoCuenta)
+                .fechaFinSuspension(fechaFin != null ? fechaFin.toString() : null)
+                .build();
+
+        return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 }

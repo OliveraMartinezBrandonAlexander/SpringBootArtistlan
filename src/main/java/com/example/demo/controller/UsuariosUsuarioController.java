@@ -59,7 +59,7 @@ public class UsuariosUsuarioController {
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
                 .usuario(u.getUsuario())
-                .contrasena(u.getContrasena())
+                .contrasena(null)
                 .correo(u.getCorreo())
                 .descripcion(u.getDescripcion())
                 .fotoPerfil(u.getFotoPerfil())

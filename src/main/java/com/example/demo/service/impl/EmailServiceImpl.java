@@ -2,21 +2,23 @@ package com.example.demo.service.impl;
 
 import com.example.demo.service.EmailService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Service
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
+    private static final String SUBJECT_OTP = "Tu c\u00f3digo de verificaci\u00f3n de Artistlan";
+    private static final String SMTP_ERROR_MESSAGE = "No se pudo enviar el codigo por correo. Revisa la configuracion SMTP.";
 
     private final JavaMailSender mailSender;
 
@@ -38,53 +40,56 @@ public class EmailServiceImpl implements EmailService {
 
         String codigoFormateado = formatearCodigo(codigo);
         String from = (mailFrom != null && !mailFrom.isBlank()) ? mailFrom : springMailUsername;
+        String toSafe = safeEmail(correoDestino);
 
         SimpleMailMessage message = new SimpleMailMessage();
         if (from != null && !from.isBlank()) {
             message.setFrom(from);
         }
         message.setTo(correoDestino);
-        message.setSubject("Verificacion de seguridad - Artistlan");
+        message.setSubject(SUBJECT_OTP);
         message.setText("""
                 Hola,
 
-                Bienvenido a Artistlan 🎨
+                Recibimos una solicitud para iniciar sesi\u00f3n o activar la verificaci\u00f3n en dos pasos (2FA) en tu cuenta de Artistlan.
 
-                Tu codigo de verificacion es:
-
+                Tu c\u00f3digo de verificaci\u00f3n es:
                 %s
 
-                Este codigo expirara en 5 minutos.
+                Este c\u00f3digo expira en 5 minutos.
 
-                Si no solicitaste este codigo, puedes ignorar este mensaje.
+                Si no solicitaste este c\u00f3digo, puedes ignorar este mensaje.
 
-                - Equipo Artistlan
+                Equipo Artistlan
                 """.formatted(codigoFormateado));
 
+        log.info("Intentando envio de correo OTP. to={}, subject={}", toSafe, SUBJECT_OTP);
         try {
             mailSender.send(message);
-            log.info("OTP enviado por correo. to={}, from={}, smtpHost={}, smtpPort={}",
-                    safeEmail(correoDestino), safeEmail(from), springMailHost, springMailPort);
+            log.info("Correo OTP enviado. to={}, subject={}, smtpHost={}, smtpPort={}",
+                    toSafe, SUBJECT_OTP, springMailHost, springMailPort);
         } catch (MailException ex) {
-            log.error("Fallo SMTP al enviar OTP. to={}, from={}, smtpHost={}, smtpPort={}, userConfigured={}, fromConfigured={}, cause={}",
-                    safeEmail(correoDestino),
-                    safeEmail(from),
+            log.error("Fallo SMTP al enviar OTP. to={}, subject={}, smtpHost={}, smtpPort={}, userConfigured={}, fromConfigured={}, exceptionType={}, cause={}",
+                    toSafe,
+                    SUBJECT_OTP,
                     springMailHost,
                     springMailPort,
                     !isBlank(springMailUsername),
                     !isBlank(mailFrom),
+                    ex.getClass().getSimpleName(),
                     ex.getMessage(),
                     ex);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo enviar el codigo por correo");
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SMTP_ERROR_MESSAGE);
         } catch (Exception ex) {
-            log.error("Error inesperado al enviar OTP. to={}, from={}, smtpHost={}, smtpPort={}, cause={}",
-                    safeEmail(correoDestino),
-                    safeEmail(from),
+            log.error("Error inesperado al enviar OTP. to={}, subject={}, smtpHost={}, smtpPort={}, exceptionType={}, cause={}",
+                    toSafe,
+                    SUBJECT_OTP,
                     springMailHost,
                     springMailPort,
+                    ex.getClass().getSimpleName(),
                     ex.getMessage(),
                     ex);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo enviar el codigo por correo");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, SMTP_ERROR_MESSAGE);
         }
     }
 
@@ -98,12 +103,12 @@ public class EmailServiceImpl implements EmailService {
     private void validarConfiguracionMinimaSmtp() {
         if (isBlank(springMailHost)) {
             log.error("Configuracion SMTP incompleta: spring.mail.host vacio. Variables esperadas: SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD, ARTISTLAN_MAIL_FROM(opcional).");
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo enviar el codigo por correo");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, SMTP_ERROR_MESSAGE);
         }
 
         if (isBlank(mailFrom) && isBlank(springMailUsername)) {
             log.error("Configuracion SMTP incompleta: no hay remitente. Define ARTISTLAN_MAIL_FROM o SPRING_MAIL_USERNAME.");
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo enviar el codigo por correo");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, SMTP_ERROR_MESSAGE);
         }
     }
 

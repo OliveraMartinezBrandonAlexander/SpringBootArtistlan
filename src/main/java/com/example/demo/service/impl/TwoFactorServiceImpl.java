@@ -41,7 +41,13 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         String code = generarCodigoOtp();
         String temporaryToken = generarTemporaryTokenSeguro();
         TwoFactorToken token = crearToken(usuario, TwoFactorPurpose.LOGIN, temporaryToken, code);
+        log.info("Generando OTP para login 2FA. usuarioId={}, correoDestino={}",
+                usuario != null ? usuario.getIdUsuario() : null,
+                safeEmail(usuario != null ? usuario.getCorreo() : null));
         emailService.enviarCodigoVerificacion(usuario.getCorreo(), code);
+        log.info("Solicitud de envio OTP login completada. usuarioId={}, correoDestino={}",
+                usuario != null ? usuario.getIdUsuario() : null,
+                safeEmail(usuario != null ? usuario.getCorreo() : null));
         return token;
     }
 
@@ -50,7 +56,13 @@ public class TwoFactorServiceImpl implements TwoFactorService {
     public TwoFactorToken crearTokenActivacionYEnviarCodigo(Usuario usuario) {
         String code = generarCodigoOtp();
         TwoFactorToken token = crearToken(usuario, TwoFactorPurpose.ACTIVATION, null, code);
+        log.info("Generando OTP para activacion 2FA. usuarioId={}, correoDestino={}",
+                usuario != null ? usuario.getIdUsuario() : null,
+                safeEmail(usuario != null ? usuario.getCorreo() : null));
         emailService.enviarCodigoVerificacion(usuario.getCorreo(), code);
+        log.info("Solicitud de envio OTP activacion completada. usuarioId={}, correoDestino={}",
+                usuario != null ? usuario.getIdUsuario() : null,
+                safeEmail(usuario != null ? usuario.getCorreo() : null));
         return token;
     }
 
@@ -155,5 +167,19 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         byte[] randomBytes = new byte[32];
         secureRandom.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private String safeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "(vacio)";
+        }
+
+        String trimmed = email.trim();
+        int at = trimmed.indexOf('@');
+        if (at <= 1) {
+            return "***";
+        }
+
+        return trimmed.charAt(0) + "***" + trimmed.substring(at);
     }
 }

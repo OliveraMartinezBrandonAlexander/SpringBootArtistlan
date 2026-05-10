@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.AuthErrorResponseDTO;
 import com.example.demo.dto.TwoFactorResendRequest;
 import com.example.demo.dto.TwoFactorResponse;
 import com.example.demo.dto.TwoFactorVerifyActivationRequest;
@@ -21,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -36,12 +38,17 @@ public class TwoFactorController {
     private final UsuarioService usuarioService;
 
     @PostMapping("/verify-login")
-    public ResponseEntity<TwoFactorResponse> verifyLogin(@Valid @RequestBody TwoFactorVerifyLoginRequest request) {
+    public ResponseEntity<?> verifyLogin(@Valid @RequestBody TwoFactorVerifyLoginRequest request) {
         TwoFactorToken token2fa = twoFactorService.validarCodigoLogin(request.getTemporaryToken(), request.getCode());
 
         Usuario usuario = usuarioRepository.findByIdConCategorias(token2fa.getUsuario().getIdUsuario())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
-        usuario = usuarioService.validarCuentaPuedeAutenticarse(usuario);
+
+        try {
+            usuario = usuarioService.validarCuentaPuedeAutenticarse(usuario);
+        } catch (ResponseStatusException ex) {
+            return construirRespuestaErrorAuth(usuario, ex);
+        }
 
         String jwt = jwtService.generarToken(usuario);
         UsuarioDTO dto = convertirADTO(usuario);
@@ -146,7 +153,7 @@ public class TwoFactorController {
                 .idUsuario(u.getIdUsuario())
                 .nombreCompleto(u.getNombreCompleto())
                 .usuario(u.getUsuario())
-                .contrasena(u.getContrasena())
+                .contrasena(null)
                 .correo(u.getCorreo())
                 .descripcion(u.getDescripcion())
                 .fotoPerfil(u.getFotoPerfil())
@@ -168,5 +175,20 @@ public class TwoFactorController {
             builder.categoria(cat.getNombreCategoria());
         }
         return builder.build();
+    }
+
+    private ResponseEntity<AuthErrorResponseDTO> construirRespuestaErrorAuth(Usuario usuario, ResponseStatusException ex) {
+        String estadoCuenta = usuario != null && usuario.getEstadoCuenta() != null
+                ? usuario.getEstadoCuenta().name()
+                : null;
+        LocalDateTime fechaFin = usuario != null ? usuario.getFechaFinSuspension() : null;
+
+        AuthErrorResponseDTO body = AuthErrorResponseDTO.builder()
+                .message(ex.getReason() != null ? ex.getReason() : "No fue posible autenticar la cuenta")
+                .estadoCuenta(estadoCuenta)
+                .fechaFinSuspension(fechaFin != null ? fechaFin.toString() : null)
+                .build();
+
+        return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 }

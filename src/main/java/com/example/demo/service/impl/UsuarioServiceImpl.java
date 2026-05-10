@@ -18,13 +18,13 @@ import com.example.demo.service.ServicioService;
 import com.example.demo.service.UsuarioService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -40,6 +40,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     private static final Set<String> ROLES_VALIDOS = Set.of("USER", "ADMIN", "MODERADOR");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+\\-()\\s]{8,20}$");
+    private static final Pattern BCRYPT_PATTERN = Pattern.compile("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
     private static final int CATEGORIA_USUARIO_MIN = 19;
     private static final int CATEGORIA_USUARIO_MAX = 37;
 
@@ -58,9 +59,15 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Autowired
     private ServicioService servicioService;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Override
     public Usuario guardarUsuario(Usuario u) {
         validarTelefono(u.getTelefono());
+        if (u.getContrasena() != null && !u.getContrasena().isBlank()) {
+            u.setContrasena(codificarContrasenaSiNecesaria(u.getContrasena()));
+        }
         return repo.save(u);
     }
 
@@ -106,7 +113,9 @@ public class UsuarioServiceImpl implements UsuarioService {
             u.setNombreCompleto(datos.getNombreCompleto());
             u.setUsuario(datos.getUsuario());
             u.setCorreo(datos.getCorreo());
-            u.setContrasena(datos.getContrasena());
+            if (datos.getContrasena() != null && !datos.getContrasena().isBlank()) {
+                u.setContrasena(codificarContrasenaSiNecesaria(datos.getContrasena()));
+            }
             u.setDescripcion(datos.getDescripcion());
             u.setFotoPerfil(datos.getFotoPerfil());
             u.setTelefono(datos.getTelefono());
@@ -163,6 +172,37 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
 
         return usuario;
+    }
+
+    @Override
+    public Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo) {
+        if (usuarioOCorreo == null || usuarioOCorreo.isBlank()) {
+            return Optional.empty();
+        }
+        String identificador = usuarioOCorreo.trim();
+        return repo.findFirstByUsuarioIgnoreCaseOrCorreoIgnoreCase(identificador, identificador);
+    }
+
+    @Override
+    public boolean validarContrasena(Usuario usuario, String contrasenaPlana) {
+        if (usuario == null || contrasenaPlana == null) {
+            return false;
+        }
+
+        String contrasenaGuardada = usuario.getContrasena();
+        if (contrasenaGuardada == null || contrasenaGuardada.isBlank()) {
+            return false;
+        }
+
+        if (!esHashBCrypt(contrasenaGuardada)) {
+            return false;
+        }
+
+        try {
+            return passwordEncoder.matches(contrasenaPlana, contrasenaGuardada);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     @Override
@@ -301,7 +341,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         if (request.getContrasenaActual() == null || request.getContrasenaActual().isBlank()) {
             throw new ResponseStatusException(BAD_REQUEST, "contrasenaActual es obligatoria para desactivar tu cuenta");
         }
-        if (!Objects.equals(solicitante.getContrasena(), request.getContrasenaActual())) {
+        if (!validarContrasena(solicitante, request.getContrasenaActual())) {
             throw new ResponseStatusException(FORBIDDEN, "La contrasena actual es incorrecta.");
         }
     }
@@ -339,7 +379,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setIdUsuario(dto.getIdUsuario());
         u.setNombreCompleto(dto.getNombreCompleto());
         u.setUsuario(dto.getUsuario());
-        u.setContrasena(dto.getContrasena());
+        u.setContrasena(codificarContrasenaSiNecesaria(dto.getContrasena()));
         u.setCorreo(dto.getCorreo());
         u.setDescripcion(dto.getDescripcion());
         u.setFotoPerfil(dto.getFotoPerfil());
@@ -375,8 +415,22 @@ public class UsuarioServiceImpl implements UsuarioService {
                 : Boolean.TRUE.equals(dto.getTwoFactorEnabled()));
 
         if (dto.getContrasena() != null && !dto.getContrasena().isEmpty()) {
-            u.setContrasena(dto.getContrasena());
+            u.setContrasena(codificarContrasenaSiNecesaria(dto.getContrasena()));
         }
         return u;
+    }
+
+    private boolean esHashBCrypt(String valor) {
+        return valor != null && BCRYPT_PATTERN.matcher(valor).matches();
+    }
+
+    private String codificarContrasenaSiNecesaria(String contrasena) {
+        if (contrasena == null || contrasena.isBlank()) {
+            return contrasena;
+        }
+        if (esHashBCrypt(contrasena)) {
+            return contrasena;
+        }
+        return passwordEncoder.encode(contrasena);
     }
 }

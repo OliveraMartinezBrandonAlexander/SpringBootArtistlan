@@ -26,6 +26,10 @@ public interface UsuarioService {
 
     Usuario validarCuentaPuedeAutenticarse(Usuario usuario);
 
+    Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo);
+
+    boolean validarContrasena(Usuario usuario, String contrasenaPlana);
+
     RespuestaModeracionDTO desactivarCuenta(Integer idUsuario, DesactivarCuentaRequestDTO request);
 
     List<Usuario> listarAdmins();
