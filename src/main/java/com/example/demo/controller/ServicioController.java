@@ -1,12 +1,17 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ServicioDTO;
+import com.example.demo.dto.PageResponseDTO;
 import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,6 +34,26 @@ public class ServicioController {
                 .toList();
 
         return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/paginado")
+    public ResponseEntity<PageResponseDTO<ServicioDTO>> obtenerTodosPaginado(
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) Integer idCategoria,
+            @PageableDefault(size = 10, sort = "idServicio") Pageable pageable
+    ) {
+        String query = StringUtils.hasText(q) ? q.trim() : null;
+        Integer categoriaId = idCategoria;
+        String categoriaNombre = categoriaId != null
+                ? null
+                : (StringUtils.hasText(categoria) ? categoria.trim() : null);
+
+        Page<ServicioDTO> page = service.listarServiciosPublicosVisiblesPaginado(query, categoriaNombre, categoriaId, pageable)
+                .map(servicio -> convertirADTO(servicio, usuarioId));
+
+        return ResponseEntity.ok(PageResponseDTO.fromPage(page));
     }
 
     @GetMapping("/{id}")

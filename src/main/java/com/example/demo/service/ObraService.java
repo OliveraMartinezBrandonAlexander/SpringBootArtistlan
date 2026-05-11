@@ -2,6 +2,9 @@ package com.example.demo.service;
 
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.model.Obra;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -9,6 +12,7 @@ public interface ObraService {
     Obra guardar(Obra o);
     List<Obra> listar();
     List<Obra> listarPublicasVisibles();
+    Page<Obra> listarPublicasVisiblesPaginado(String q, String categoria, Integer idCategoria, Pageable pageable);
     Optional<Obra> buscarPorId(Integer id);
     Optional<Obra> buscarPublicaVisiblePorId(Integer id);
     Optional<Obra> actualizarObra(Integer id, Obra obra);

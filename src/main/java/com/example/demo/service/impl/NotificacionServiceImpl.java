@@ -9,6 +9,8 @@ import com.example.demo.repository.NotificacionRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.NotificacionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,14 @@ public class NotificacionServiceImpl implements NotificacionService {
     public List<NotificacionDTO> listarPorUsuario(Integer idUsuario) {
         validarUsuarioExiste(idUsuario);
         return notificacionRepository.findActivasPorUsuario(idUsuario).stream().map(this::toDto).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificacionDTO> listarPorUsuarioPaginado(Integer idUsuario, boolean soloNoLeidas, String tipo, Pageable pageable) {
+        validarUsuarioExiste(idUsuario);
+        return notificacionRepository.findActivasPorUsuarioPaginado(idUsuario, soloNoLeidas, tipo, pageable)
+                .map(this::toDto);
     }
 
     @Override
@@ -164,8 +174,6 @@ public class NotificacionServiceImpl implements NotificacionService {
                 .usuarioOrigen(usuarioOrigenLogin)
                 .nombreOrigen(nombreOrigen)
                 .fotoOrigen(fotoOrigen)
-                .nombreUsuarioOrigen(nombreOrigen)
-                .fotoPerfilOrigen(fotoOrigen)
                 .tipoNotificacion(notificacion.getTipoNotificacion())
                 .rolDestino(resolverRolDestino(notificacion))
                 .titulo(notificacion.getTitulo())

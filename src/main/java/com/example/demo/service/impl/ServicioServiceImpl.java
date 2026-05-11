@@ -16,6 +16,8 @@ import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ServicioService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -75,6 +77,21 @@ public class ServicioServiceImpl implements ServicioService {
         );
         inicializarRelacionesPublicas(servicios);
         return servicios;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Servicio> listarServiciosPublicosVisiblesPaginado(String q, String categoria, Integer idCategoria, Pageable pageable) {
+        Page<Servicio> page = repo.findPublicosVisiblesPaginado(
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO,
+                q,
+                categoria,
+                idCategoria,
+                pageable
+        );
+        inicializarRelacionesPublicas(page.getContent());
+        return page;
     }
 
     @Override

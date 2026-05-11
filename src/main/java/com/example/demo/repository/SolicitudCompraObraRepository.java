@@ -1,6 +1,8 @@
 package com.example.demo.repository;
 
 import com.example.demo.model.SolicitudCompraObra;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -38,6 +40,62 @@ public interface SolicitudCompraObraRepository extends JpaRepository<SolicitudCo
             ORDER BY s.fechaCreacion DESC
             """)
     List<SolicitudCompraObra> findEnviadas(@Param("compradorId") Integer compradorId);
+
+    @Query(
+            value = """
+            SELECT s FROM SolicitudCompraObra s
+            JOIN FETCH s.obra o
+            JOIN FETCH s.comprador c
+            WHERE s.vendedor.idUsuario = :vendedorId
+              AND (
+                    :estado IS NULL
+                    OR :estado = ''
+                    OR UPPER(s.estadoSolicitud) = UPPER(:estado)
+                  )
+            """,
+            countQuery = """
+            SELECT COUNT(s.idSolicitud) FROM SolicitudCompraObra s
+            WHERE s.vendedor.idUsuario = :vendedorId
+              AND (
+                    :estado IS NULL
+                    OR :estado = ''
+                    OR UPPER(s.estadoSolicitud) = UPPER(:estado)
+                  )
+            """
+    )
+    Page<SolicitudCompraObra> findRecibidasPaginadas(
+            @Param("vendedorId") Integer vendedorId,
+            @Param("estado") String estado,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+            SELECT s FROM SolicitudCompraObra s
+            JOIN FETCH s.obra o
+            JOIN FETCH s.vendedor v
+            WHERE s.comprador.idUsuario = :compradorId
+              AND (
+                    :estado IS NULL
+                    OR :estado = ''
+                    OR UPPER(s.estadoSolicitud) = UPPER(:estado)
+                  )
+            """,
+            countQuery = """
+            SELECT COUNT(s.idSolicitud) FROM SolicitudCompraObra s
+            WHERE s.comprador.idUsuario = :compradorId
+              AND (
+                    :estado IS NULL
+                    OR :estado = ''
+                    OR UPPER(s.estadoSolicitud) = UPPER(:estado)
+                  )
+            """
+    )
+    Page<SolicitudCompraObra> findEnviadasPaginadas(
+            @Param("compradorId") Integer compradorId,
+            @Param("estado") String estado,
+            Pageable pageable
+    );
 
     boolean existsByObraIdObraAndCompradorIdUsuarioAndEstadoSolicitudIn(Integer idObra, Integer idComprador, List<String> estados);
 

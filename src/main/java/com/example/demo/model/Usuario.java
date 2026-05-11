@@ -20,6 +20,7 @@ import java.util.Set;
 @Table(name = "usuario")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @EqualsAndHashCode(callSuper = false, exclude = {"categoriasUsuarios"})
+@ToString(exclude = {"categoriasUsuarios"})
 public class Usuario {
 
     @Id

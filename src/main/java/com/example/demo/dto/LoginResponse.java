@@ -43,7 +43,7 @@ public class LoginResponse {
         }
         this.idUsuario = usuarioDTO.getIdUsuario();
         this.nombreCompleto = usuarioDTO.getNombreCompleto();
-        this.contrasena = usuarioDTO.getContrasena();
+        this.contrasena = null;
         this.usuario = usuarioDTO.getUsuario();
         this.correo = usuarioDTO.getCorreo();
         this.descripcion = usuarioDTO.getDescripcion();

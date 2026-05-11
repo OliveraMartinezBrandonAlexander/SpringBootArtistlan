@@ -10,6 +10,8 @@ import com.example.demo.repository.*;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -75,6 +77,21 @@ public class ObraServiceImpl implements ObraService {
         );
         inicializarRelacionesPublicas(obras);
         return obras;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Obra> listarPublicasVisiblesPaginado(String q, String categoria, Integer idCategoria, Pageable pageable) {
+        Page<Obra> page = obraRepository.findPublicasVisiblesPaginado(
+                ESTADOS_NO_VISIBLES_PUBLICO,
+                ESTADOS_DUENO_NO_VISIBLES_PUBLICO,
+                q,
+                categoria,
+                idCategoria,
+                pageable
+        );
+        inicializarRelacionesPublicas(page.getContent());
+        return page;
     }
 
     @Override

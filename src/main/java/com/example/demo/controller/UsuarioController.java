@@ -1,20 +1,26 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
+import com.example.demo.dto.ArtistaResumenDTO;
 import com.example.demo.dto.AuthErrorResponseDTO;
 import com.example.demo.dto.CambiarRolRequestDTO;
 import com.example.demo.dto.LoginRequestDTO;
 import com.example.demo.dto.LoginResponse;
+import com.example.demo.dto.PageResponseDTO;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
+import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
 import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaUsuarios;
 import com.example.demo.model.CategoriaUsuariosID;
+import com.example.demo.model.Obra;
 import com.example.demo.model.Usuario;
+import com.example.demo.repository.CategoriaUsuariosRepository;
 import com.example.demo.repository.CategoriaRepository;
+import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.JwtService;
@@ -28,8 +34,12 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,6 +47,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @RestController
@@ -49,10 +60,16 @@ public class UsuarioController {
             EstadoCuenta.DESACTIVADO,
             EstadoCuenta.BLOQUEADO_PERMANENTE
     );
+    private static final List<EstadoModeracion> ESTADOS_OBRA_NO_PUBLICOS = List.of(
+            EstadoModeracion.OCULTO,
+            EstadoModeracion.ELIMINADO_POR_MODERACION
+    );
 
     private final UsuarioService usuarioService;
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
+    private final CategoriaUsuariosRepository categoriaUsuariosRepository;
+    private final ObraRepository obraRepository;
     private final UsuarioIdCategoriaService usuarioIdCategoriaService;
     private final FavoritosService favoritosService;
     private final TwoFactorService twoFactorService;
@@ -72,6 +89,67 @@ public class UsuarioController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/paginado")
+    public ResponseEntity<PageResponseDTO<UsuarioDTO>> obtenerUsuariosPaginado(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String rol,
+            @RequestParam(required = false) EstadoCuenta estadoCuenta,
+            @RequestParam(required = false) Integer idCategoria,
+            @PageableDefault(size = 10, sort = "idUsuario") Pageable pageable
+    ) {
+        String query = StringUtils.hasText(q) ? q.trim() : null;
+        String rolNormalizado = StringUtils.hasText(rol) ? rol.trim() : null;
+
+        Page<UsuarioDTO> page = usuarioRepository.findUsuariosPaginados(
+                        query,
+                        rolNormalizado,
+                        estadoCuenta,
+                        idCategoria,
+                        pageable
+                )
+                .map(this::convertirADTOGestion);
+
+        return ResponseEntity.ok(PageResponseDTO.fromPage(page));
+    }
+
+    @GetMapping("/artistas/paginado")
+    public ResponseEntity<PageResponseDTO<ArtistaResumenDTO>> obtenerArtistasPaginado(
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) Integer idCategoria,
+            @PageableDefault(size = 10, sort = "idUsuario") Pageable pageable
+    ) {
+        String query = StringUtils.hasText(q) ? q.trim() : null;
+        Integer categoriaId = idCategoria;
+        String categoriaNombre = categoriaId != null
+                ? null
+                : (StringUtils.hasText(categoria) ? categoria.trim() : null);
+
+        Page<Usuario> pageUsuarios = usuarioRepository.findArtistasPublicosPaginado(
+                ESTADOS_NO_PUBLICOS,
+                query,
+                categoriaNombre,
+                categoriaId,
+                pageable
+        );
+
+        List<Usuario> usuariosPagina = pageUsuarios.getContent();
+        Map<Integer, CategoriaUsuarios> categoriaPrincipalPorUsuario = obtenerCategoriaPrincipalPorUsuario(usuariosPagina);
+        Map<Integer, List<String>> miniObrasPorUsuario = obtenerMiniObrasPorUsuario(usuariosPagina);
+
+        Page<ArtistaResumenDTO> page = pageUsuarios.map(usuario ->
+                convertirAArtistaResumenDTO(
+                        usuario,
+                        usuarioId,
+                        categoriaPrincipalPorUsuario.get(usuario.getIdUsuario()),
+                        miniObrasPorUsuario.getOrDefault(usuario.getIdUsuario(), List.of())
+                )
+        );
+
+        return ResponseEntity.ok(PageResponseDTO.fromPage(page));
     }
 
     @GetMapping("/{id}")
@@ -235,6 +313,137 @@ public class UsuarioController {
         }
 
         return favoritosService.esArtistaFavorito(usuarioIdConsulta.intValue(), idArtista);
+    }
+
+    private ArtistaResumenDTO convertirAArtistaResumenDTO(
+            Usuario usuario,
+            Integer usuarioIdConsulta,
+            CategoriaUsuarios categoriaPrincipal,
+            List<String> miniObras
+    ) {
+        Integer likes = favoritosService.likesPorArtista(usuario.getIdUsuario().longValue());
+        boolean esFavorito = usuarioIdConsulta != null && favoritosService.esArtistaFavorito(usuarioIdConsulta, usuario.getIdUsuario());
+
+        return ArtistaResumenDTO.builder()
+                .idUsuario(usuario.getIdUsuario())
+                .nombreCompleto(usuario.getNombreCompleto())
+                .usuario(usuario.getUsuario())
+                .descripcion(usuario.getDescripcion())
+                .fotoPerfil(usuario.getFotoPerfil())
+                .idCategoria(categoriaPrincipal != null && categoriaPrincipal.getCategoria() != null
+                        ? categoriaPrincipal.getCategoria().getIdCategoria()
+                        : null)
+                .categoria(categoriaPrincipal != null && categoriaPrincipal.getCategoria() != null
+                        ? categoriaPrincipal.getCategoria().getNombreCategoria()
+                        : null)
+                .likes(likes)
+                .esFavorito(esFavorito)
+                .rol(usuario.getRol())
+                .miniObras(miniObras)
+                .build();
+    }
+
+    private UsuarioDTO convertirADTOGestion(Usuario usuario) {
+        return UsuarioDTO.builder()
+                .idUsuario(usuario.getIdUsuario())
+                .nombreCompleto(usuario.getNombreCompleto())
+                .usuario(usuario.getUsuario())
+                .correo(usuario.getCorreo())
+                .descripcion(usuario.getDescripcion())
+                .fotoPerfil(usuario.getFotoPerfil())
+                .telefono(usuario.getTelefono())
+                .redesSociales(usuario.getRedesSociales())
+                .ubicacion(usuario.getUbicacion())
+                .fechaNacimiento(usuario.getFechaNacimiento())
+                .rol(usuario.getRol())
+                .twoFactorEnabled(Boolean.TRUE.equals(usuario.getTwoFactorEnabled()))
+                .contrasena(null)
+                .build();
+    }
+
+    private Map<Integer, CategoriaUsuarios> obtenerCategoriaPrincipalPorUsuario(List<Usuario> usuarios) {
+        Map<Integer, CategoriaUsuarios> categoriaPrincipal = new HashMap<>();
+        if (usuarios == null || usuarios.isEmpty()) {
+            return categoriaPrincipal;
+        }
+
+        List<Integer> ids = usuarios.stream()
+                .map(Usuario::getIdUsuario)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (ids.isEmpty()) {
+            return categoriaPrincipal;
+        }
+
+        List<CategoriaUsuarios> relaciones = categoriaUsuariosRepository.findByUsuarioIdsConCategoria(ids);
+        for (CategoriaUsuarios cu : relaciones) {
+            if (cu.getUsuario() == null || cu.getUsuario().getIdUsuario() == null) {
+                continue;
+            }
+            Integer idUsuario = cu.getUsuario().getIdUsuario();
+            if (categoriaPrincipal.containsKey(idUsuario)) {
+                continue;
+            }
+            categoriaPrincipal.put(idUsuario, cu);
+        }
+        return categoriaPrincipal;
+    }
+
+    private Map<Integer, List<String>> obtenerMiniObrasPorUsuario(List<Usuario> usuarios) {
+        Map<Integer, List<String>> miniObras = new HashMap<>();
+        if (usuarios == null || usuarios.isEmpty()) {
+            return miniObras;
+        }
+
+        List<Integer> ids = usuarios.stream()
+                .map(Usuario::getIdUsuario)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (ids.isEmpty()) {
+            return miniObras;
+        }
+
+        List<Obra> obras = obraRepository.findPublicasVisiblesPorUsuarioIds(
+                ids,
+                ESTADOS_OBRA_NO_PUBLICOS,
+                ESTADOS_NO_PUBLICOS
+        );
+
+        Map<Integer, List<String>> candidatasPorUsuario = new HashMap<>();
+        for (Obra obra : obras) {
+            if (obra.getUsuario() == null || obra.getUsuario().getIdUsuario() == null) {
+                continue;
+            }
+            Integer idUsuario = obra.getUsuario().getIdUsuario();
+            if (obra.getImagen1() == null || obra.getImagen1().isBlank()) {
+                continue;
+            }
+            candidatasPorUsuario
+                    .computeIfAbsent(idUsuario, k -> new ArrayList<>())
+                    .add(obra.getImagen1());
+        }
+
+        for (Integer id : ids) {
+            List<String> candidatas = new ArrayList<>(candidatasPorUsuario.getOrDefault(id, new ArrayList<>()));
+            if (!candidatas.isEmpty()) {
+                Collections.shuffle(candidatas, ThreadLocalRandom.current());
+            }
+
+            List<String> lista = miniObras.computeIfAbsent(id, k -> new ArrayList<>());
+            int limite = Math.min(3, candidatas.size());
+            for (int i = 0; i < limite; i++) {
+                lista.add(candidatas.get(i));
+            }
+            while (lista.size() < 3) {
+                lista.add(null);
+            }
+        }
+
+        return miniObras;
     }
 
     private Usuario convertirAEntidad(UsuarioDTO dto, Usuario usuarioExistente) {

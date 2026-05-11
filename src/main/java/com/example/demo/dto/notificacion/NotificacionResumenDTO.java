@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 @Value
 @Builder
-public class NotificacionDTO {
+public class NotificacionResumenDTO {
     Integer idNotificacion;
     String tipoOrigen;
     Integer idUsuarioOrigen;

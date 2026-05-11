@@ -17,4 +17,12 @@ public interface CategoriaUsuariosRepository extends JpaRepository<CategoriaUsua
     @Query("DELETE FROM CategoriaUsuarios cu WHERE cu.usuario.idUsuario = :id")
     void deleteByUsuarioId(@Param("id") Integer id);
 
+    @Query("""
+            SELECT cu
+            FROM CategoriaUsuarios cu
+            JOIN FETCH cu.categoria c
+            WHERE cu.usuario.idUsuario IN :usuarioIds
+            """)
+    List<CategoriaUsuarios> findByUsuarioIdsConCategoria(@Param("usuarioIds") List<Integer> usuarioIds);
+
 }

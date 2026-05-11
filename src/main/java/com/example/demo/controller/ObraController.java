@@ -2,13 +2,18 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ActualizarImagenObraRequestDTO;
 import com.example.demo.dto.ObraDTO;
+import com.example.demo.dto.PageResponseDTO;
 import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.text.Normalizer;
@@ -35,6 +40,26 @@ public class ObraController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/paginado")
+    public ResponseEntity<PageResponseDTO<ObraDTO>> obtenerTodasPaginado(
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) Integer idCategoria,
+            @PageableDefault(size = 20, sort = "idObra") Pageable pageable) {
+
+        String query = StringUtils.hasText(q) ? q.trim() : null;
+        Integer categoriaId = idCategoria;
+        String categoriaNombre = categoriaId != null
+                ? null
+                : (StringUtils.hasText(categoria) ? categoria.trim() : null);
+
+        Page<ObraDTO> page = service.listarPublicasVisiblesPaginado(query, categoriaNombre, categoriaId, pageable)
+                .map(obra -> convertirADTO(obra, usuarioId));
+
+        return ResponseEntity.ok(PageResponseDTO.fromPage(page));
     }
 
     @GetMapping("/{id}")

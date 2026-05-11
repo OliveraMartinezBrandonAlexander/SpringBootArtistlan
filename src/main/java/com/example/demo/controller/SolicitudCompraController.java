@@ -2,10 +2,14 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.solicitud.ContadorSolicitudesPendientesDTO;
 import com.example.demo.dto.solicitud.CrearSolicitudCompraRequestDTO;
+import com.example.demo.dto.PageResponseDTO;
 import com.example.demo.dto.solicitud.ResolverSolicitudRequestDTO;
 import com.example.demo.dto.solicitud.SolicitudCompraDTO;
 import com.example.demo.service.SolicitudCompraService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,9 +33,31 @@ public class SolicitudCompraController {
         return ResponseEntity.ok(solicitudCompraService.listarRecibidas(vendedorId));
     }
 
+    @GetMapping("/recibidas/{vendedorId}/paginado")
+    public ResponseEntity<PageResponseDTO<SolicitudCompraDTO>> recibidasPaginadas(
+            @PathVariable Integer vendedorId,
+            @RequestParam(required = false) String estado,
+            @PageableDefault(size = 10, sort = "fechaCreacion", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ResponseEntity.ok(PageResponseDTO.fromPage(
+                solicitudCompraService.listarRecibidasPaginadas(vendedorId, estado, pageable)
+        ));
+    }
+
     @GetMapping("/enviadas/{compradorId}")
     public ResponseEntity<List<SolicitudCompraDTO>> enviadas(@PathVariable Integer compradorId) {
         return ResponseEntity.ok(solicitudCompraService.listarEnviadas(compradorId));
+    }
+
+    @GetMapping("/enviadas/{compradorId}/paginado")
+    public ResponseEntity<PageResponseDTO<SolicitudCompraDTO>> enviadasPaginadas(
+            @PathVariable Integer compradorId,
+            @RequestParam(required = false) String estado,
+            @PageableDefault(size = 10, sort = "fechaCreacion", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ResponseEntity.ok(PageResponseDTO.fromPage(
+                solicitudCompraService.listarEnviadasPaginadas(compradorId, estado, pageable)
+        ));
     }
 
     @GetMapping("/{usuarioId}/contador-pendientes")

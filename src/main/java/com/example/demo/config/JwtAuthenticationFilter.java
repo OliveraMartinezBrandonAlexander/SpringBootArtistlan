@@ -70,27 +70,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 String rol = normalizarRol(usuario.getRol());
+                String principal = String.valueOf(usuario.getIdUsuario());
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
-                                usuario,
+                                principal,
                                 null,
                                 List.of(new SimpleGrantedAuthority("ROLE_" + rol))
                         );
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
-
-            filterChain.doFilter(request, response);
         } catch (ResponseStatusException ex) {
             manejarResponseStatusException(response, ex, null);
+            return;
         } catch (Exception ex) {
             escribirError(response, HttpStatus.UNAUTHORIZED, "Token invalido");
+            return;
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private void manejarResponseStatusException(HttpServletResponse response,
                                                 ResponseStatusException ex,
                                                 Usuario usuario) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
 
         if (status == HttpStatus.LOCKED || status == HttpStatus.FORBIDDEN) {
@@ -115,6 +122,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void escribirError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");

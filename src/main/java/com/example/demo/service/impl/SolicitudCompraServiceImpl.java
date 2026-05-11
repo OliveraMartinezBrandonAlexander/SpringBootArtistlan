@@ -16,6 +16,8 @@ import com.example.demo.service.CarritoService;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.SolicitudCompraService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -100,6 +102,24 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     public List<SolicitudCompraDTO> listarEnviadas(Integer compradorId) {
         validarUsuarioExiste(compradorId, "Comprador no encontrado");
         return solicitudRepository.findEnviadas(compradorId).stream().map(this::toDto).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SolicitudCompraDTO> listarRecibidasPaginadas(Integer vendedorId, String estado, Pageable pageable) {
+        validarUsuarioExiste(vendedorId, "Vendedor no encontrado");
+        String estadoNormalizado = normalizarTextoOpcional(estado);
+        return solicitudRepository.findRecibidasPaginadas(vendedorId, estadoNormalizado, pageable)
+                .map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SolicitudCompraDTO> listarEnviadasPaginadas(Integer compradorId, String estado, Pageable pageable) {
+        validarUsuarioExiste(compradorId, "Comprador no encontrado");
+        String estadoNormalizado = normalizarTextoOpcional(estado);
+        return solicitudRepository.findEnviadasPaginadas(compradorId, estadoNormalizado, pageable)
+                .map(this::toDto);
     }
 
     @Override
