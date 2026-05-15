@@ -195,21 +195,8 @@ public class UsuarioController {
 
     @PutMapping("/{id}")
     public ResponseEntity<UsuarioDTO> editarUsuario(@PathVariable Integer id, @RequestBody UsuarioDTO dto) {
-        try {
-            Usuario actualizado = usuarioService.actualizarUsuarioConCategoria(id, dto);
-            return ResponseEntity.ok(convertirADTO(actualizado, null));
-
-        } catch (java.util.NoSuchElementException e) {
-            System.err.println("ERROR: Usuario o Categoría no encontrada: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.notFound().build();
-
-        } catch (Exception e) {
-
-            System.err.println("ERROR CRÍTICO AL ACTUALIZAR USUARIO:");
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        Usuario actualizado = usuarioService.actualizarUsuarioConCategoria(id, dto);
+        return ResponseEntity.ok(convertirADTO(actualizado, null));
     }
 
     @DeleteMapping
