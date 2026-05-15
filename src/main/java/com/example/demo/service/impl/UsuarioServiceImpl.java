@@ -280,9 +280,21 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public Usuario actualizarUsuarioConCategoria(Integer id, UsuarioDTO dto) {
-
         Usuario usuario = repo.findByIdConCategorias(id)
                 .orElseThrow(() -> new java.util.NoSuchElementException("Usuario no encontrado con ID: " + id));
+
+        String usuarioNormalizado = normalizeRequired(dto.getUsuario(), "El nombre de usuario es obligatorio.");
+        String correoNormalizado = normalizeRequired(dto.getCorreo(), "El correo es obligatorio.");
+
+        if (repo.existsByUsuarioIgnoreCaseAndIdUsuarioNot(usuarioNormalizado, id)) {
+            throw new BusinessException("El nombre de usuario ya está en uso.");
+        }
+        if (repo.existsByCorreoIgnoreCaseAndIdUsuarioNot(correoNormalizado, id)) {
+            throw new BusinessException("El correo ya está en uso.");
+        }
+
+        dto.setUsuario(usuarioNormalizado);
+        dto.setCorreo(correoNormalizado);
 
         usuario = convertirAEntidad(dto, usuario);
         validarTelefono(usuario.getTelefono());
@@ -422,6 +434,17 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     private boolean esHashBCrypt(String valor) {
         return valor != null && BCRYPT_PATTERN.matcher(valor).matches();
+    }
+
+    private String normalizeRequired(String value, String errorMessage) {
+        if (value == null) {
+            throw new BusinessException(errorMessage);
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(errorMessage);
+        }
+        return normalized;
     }
 
     private String codificarContrasenaSiNecesaria(String contrasena) {
