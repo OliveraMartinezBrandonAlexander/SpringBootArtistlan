@@ -7,6 +7,7 @@ import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.UsuarioService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/obrasDeUsuario")
 @AllArgsConstructor
+@Slf4j
 public class ObrasDeUsuarioController {
 
     private final ObraService obraService;
@@ -29,14 +31,21 @@ public class ObrasDeUsuarioController {
     public ResponseEntity<List<ObraDTO>> obtenerObrasPorUsuario(
             @PathVariable Integer usuarioId,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
+        log.info("PortafolioBackendDebug GET obras propias recibido usuarioId={} usuarioIdConsulta={}", usuarioId, usuarioIdConsulta);
+        if (usuarioId == null || usuarioId <= 0) {
+            log.info("PortafolioBackendDebug GET obras propias 400 usuarioId invalido={}", usuarioId);
+            return ResponseEntity.badRequest().build();
+        }
 
         if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
+            log.info("PortafolioBackendDebug GET obras propias 404 usuarioId={}", usuarioId);
             return ResponseEntity.notFound().build();
         }
 
         List<Obra> obras = obraService.buscarPorUsuarioId(usuarioId);
 
         if (obras.isEmpty()) {
+            log.info("PortafolioBackendDebug GET obras propias usuarioId={} total=0", usuarioId);
             return ResponseEntity.noContent().build();
         }
 
@@ -44,6 +53,7 @@ public class ObrasDeUsuarioController {
                 .map(o -> convertirADTO(o, usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId))
                 .collect(Collectors.toList());
 
+        log.info("PortafolioBackendDebug GET obras propias usuarioId={} total={}", usuarioId, dtos.size());
         return ResponseEntity.ok(dtos);
     }
 
@@ -76,6 +86,10 @@ public class ObrasDeUsuarioController {
             @RequestParam(required = false) Integer usuarioIdConsulta) {
 
         try {
+            if (usuarioId == null || usuarioId <= 0 || obraId == null || obraId <= 0) {
+                log.info("ObraCrudBackendDebug UPDATE 400 usuarioId={} idObra={}", usuarioId, obraId);
+                return ResponseEntity.badRequest().build();
+            }
             Obra actualizada = obraService.actualizarObraDeUsuario(usuarioId, obraId, obraDTO);
             return ResponseEntity.ok(convertirADTO(
                     actualizada,
@@ -96,6 +110,10 @@ public class ObrasDeUsuarioController {
             @PathVariable Integer obraId) {
 
         try {
+            if (usuarioId == null || usuarioId <= 0 || obraId == null || obraId <= 0) {
+                log.info("ObraCrudBackendDebug DELETE 400 usuarioId={} idObra={}", usuarioId, obraId);
+                return ResponseEntity.badRequest().build();
+            }
             obraService.eliminarObraDeUsuario(usuarioId, obraId);
             return ResponseEntity.noContent().build();
         } catch (NoSuchElementException e) {

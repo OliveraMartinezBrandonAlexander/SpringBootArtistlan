@@ -15,6 +15,7 @@ public interface ObraService {
     Page<Obra> listarPublicasVisiblesPaginado(String q, String categoria, Integer idCategoria, Pageable pageable);
     Optional<Obra> buscarPorId(Integer id);
     Optional<Obra> buscarPublicaVisiblePorId(Integer id);
+    Optional<Obra> buscarDetalleVisibleOPropioPorId(Integer id, Integer usuarioId);
     Optional<Obra> actualizarObra(Integer id, Obra obra);
     boolean eliminar(Integer id);
     Optional<Obra> actualizarImagen1(Integer id, String urlImagen);

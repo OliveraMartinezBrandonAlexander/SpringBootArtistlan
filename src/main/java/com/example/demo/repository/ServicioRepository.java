@@ -18,22 +18,37 @@ public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
     @Query("""
     SELECT DISTINCT s
     FROM Servicio s
+    JOIN FETCH s.usuario u
     LEFT JOIN FETCH s.categoriasServicios cs
     LEFT JOIN FETCH cs.categoria
-    WHERE s.usuario.idUsuario = :idUsuario
+    WHERE u.idUsuario = :idUsuario
     """)
     List<Servicio> findByUsuarioIdUsuario(@Param("idUsuario") Integer idUsuario);
 
     @Query("""
     SELECT DISTINCT s
     FROM Servicio s
+    JOIN FETCH s.usuario u
     LEFT JOIN FETCH s.categoriasServicios cs
     LEFT JOIN FETCH cs.categoria
-    WHERE s.usuario.idUsuario = :idUsuario
+    WHERE u.idUsuario = :idUsuario
       AND s.estadoModeracion <> :estadoModeracion
     """)
     List<Servicio> findByUsuarioIdUsuarioAndEstadoModeracionNot(@Param("idUsuario") Integer idUsuario,
                                                                 @Param("estadoModeracion") EstadoModeracion estadoModeracion);
+
+    @Query("""
+    SELECT DISTINCT s
+    FROM Servicio s
+    JOIN FETCH s.usuario u
+    LEFT JOIN FETCH s.categoriasServicios cs
+    LEFT JOIN FETCH cs.categoria
+    WHERE u.idUsuario = :idUsuario
+      AND COALESCE(s.oculto, false) = false
+      AND s.estadoModeracion NOT IN :estadosModeracion
+    """)
+    List<Servicio> findPropiosActivosByUsuarioId(@Param("idUsuario") Integer idUsuario,
+                                                 @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion);
 
     @Query("""
     SELECT DISTINCT s FROM Servicio s
@@ -44,6 +59,7 @@ public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
 
     @Query("""
     SELECT DISTINCT s FROM Servicio s
+    LEFT JOIN FETCH s.usuario
     LEFT JOIN FETCH s.categoriasServicios cs
     LEFT JOIN FETCH cs.categoria
     WHERE s.idServicio = :idServicio

@@ -7,6 +7,7 @@ import com.example.demo.model.Servicio;
 import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ServicioService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -19,6 +20,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/servicios")
 @AllArgsConstructor
+@Slf4j
 public class ServicioController {
 
     private final ServicioService service;
@@ -59,7 +61,11 @@ public class ServicioController {
     @GetMapping("/{id}")
     public ResponseEntity<ServicioDTO> obtenerPorId(@PathVariable Integer id,
                                                     @RequestParam(required = false) Integer usuarioId) {
-        return service.buscarServicioPublicoVisiblePorId(id)
+        if (id == null || id <= 0) {
+            log.info("ServicioCrudBackendDebug GET detalle 400 idServicio={} usuarioId={}", id, usuarioId);
+            return ResponseEntity.badRequest().build();
+        }
+        return service.buscarDetalleVisibleOPropioPorId(id, usuarioId)
                 .map(s -> ResponseEntity.ok(convertirADTO(s, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }

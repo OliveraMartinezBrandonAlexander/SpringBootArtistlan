@@ -6,6 +6,7 @@ import com.example.demo.model.Servicio;
 import com.example.demo.service.ServicioService;
 import com.example.demo.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import java.util.NoSuchElementException;
 @RestController
 @RequestMapping("/api/portafolioPersonal")
 @RequiredArgsConstructor
+@Slf4j
 public class ServiciosPortafolioPersonalController {
 
     private final ServicioService servicioService;
@@ -23,8 +25,14 @@ public class ServiciosPortafolioPersonalController {
 
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<ServicioDTO>> obtenerServiciosPorUsuario(@PathVariable Integer usuarioId) {
+        log.info("PortafolioBackendDebug GET servicios propios recibido usuarioId={}", usuarioId);
+        if (usuarioId == null || usuarioId <= 0) {
+            log.info("PortafolioBackendDebug GET servicios propios 400 usuarioId invalido={}", usuarioId);
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
 
         if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
+            log.info("PortafolioBackendDebug GET servicios propios 404 usuarioId={}", usuarioId);
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
@@ -32,6 +40,7 @@ public class ServiciosPortafolioPersonalController {
                 .map(this::convertirADTO)
                 .toList();
 
+        log.info("PortafolioBackendDebug GET servicios propios usuarioId={} total={}", usuarioId, servicios.size());
         return new ResponseEntity<>(servicios, HttpStatus.OK);
     }
 
@@ -57,6 +66,10 @@ public class ServiciosPortafolioPersonalController {
                                                           @RequestBody ServicioDTO servicioActualizado) {
 
         try {
+            if (usuarioId == null || usuarioId <= 0 || idServicio == null || idServicio <= 0) {
+                log.info("ServicioCrudBackendDebug UPDATE 400 usuarioId={} idServicio={}", usuarioId, idServicio);
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
             Servicio actualizado = servicioService.actualizarServicioDeUsuario(usuarioId, idServicio, servicioActualizado);
             return new ResponseEntity<>(convertirADTO(actualizado), HttpStatus.OK);
         } catch (NoSuchElementException e) {
@@ -73,6 +86,10 @@ public class ServiciosPortafolioPersonalController {
                                                  @PathVariable Integer idServicio) {
 
         try {
+            if (usuarioId == null || usuarioId <= 0 || idServicio == null || idServicio <= 0) {
+                log.info("ServicioCrudBackendDebug DELETE 400 usuarioId={} idServicio={}", usuarioId, idServicio);
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
             servicioService.eliminarServicioDeUsuario(usuarioId, idServicio);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (NoSuchElementException e) {

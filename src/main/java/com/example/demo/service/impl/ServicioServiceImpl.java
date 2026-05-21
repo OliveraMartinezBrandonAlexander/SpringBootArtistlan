@@ -16,6 +16,7 @@ import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.ServicioService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ServicioServiceImpl implements ServicioService {
 
     private static final String MENSAJE_SERVICIO_RETIRADO_MODIFICAR = "Este servicio fue retirado por moderacion y no puede modificarse.";
@@ -112,6 +114,47 @@ public class ServicioServiceImpl implements ServicioService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Servicio> buscarDetalleVisibleOPropioPorId(Integer id, Integer usuarioId) {
+        log.info("ServicioCrudBackendDebug GET detalle recibido idServicio={} usuarioId={}", id, usuarioId);
+
+        Optional<Servicio> servicioPublico = buscarServicioPublicoVisiblePorId(id);
+        if (servicioPublico.isPresent()) {
+            Servicio servicio = servicioPublico.get();
+            Integer propietario = obtenerPropietarioId(servicio);
+            log.info("ServicioCrudBackendDebug GET detalle publico encontrado idServicio={} propietario={} usuarioId={}",
+                    id, propietario, usuarioId);
+            return servicioPublico;
+        }
+
+        Optional<Servicio> servicioOpt = repo.findByIdConCategoria(id);
+        log.info("ServicioCrudBackendDebug GET detalle existe={} idServicio={}", servicioOpt.isPresent(), id);
+        if (servicioOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Servicio servicio = servicioOpt.get();
+        Integer propietario = obtenerPropietarioId(servicio);
+        log.info("ServicioCrudBackendDebug GET detalle propietario real idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
+                id, propietario, usuarioId, servicio.getOculto(), servicio.getEstadoModeracion());
+
+        if (estaServicioOcultoOEliminado(servicio)) {
+            log.info("ServicioCrudBackendDebug GET detalle 404 por servicio oculto/eliminado idServicio={}", id);
+            return Optional.empty();
+        }
+
+        if (usuarioId == null) {
+            log.info("ServicioCrudBackendDebug GET detalle 404 sin usuarioId para servicio no publico idServicio={}", id);
+            return Optional.empty();
+        }
+
+        validarPertenencia(servicio, usuarioId);
+        inicializarRelacionPublica(servicio);
+        log.info("ServicioCrudBackendDebug GET detalle propio editable OK idServicio={} propietario={}", id, propietario);
+        return Optional.of(servicio);
+    }
+
+    @Override
     @Transactional
     public Optional<Servicio> actualizarServicio(Integer id, Servicio servicioActualizado) {
         return repo.findById(id).map(existente -> {
@@ -133,6 +176,10 @@ public class ServicioServiceImpl implements ServicioService {
         if (servicio == null) {
             return false;
         }
+        if (estaServicioOcultoOEliminado(servicio)) {
+            log.info("ServicioCrudBackendDebug DELETE /api/servicios/{} no ejecutado: ya oculto/eliminado", id);
+            return false;
+        }
 
         validarNoRetiradoPorModeracionParaEliminar(servicio);
         ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
@@ -141,10 +188,12 @@ public class ServicioServiceImpl implements ServicioService {
 
     @Override
     public List<Servicio> buscarPorUsuarioId(Integer usuarioId) {
-        return repo.findByUsuarioIdUsuarioAndEstadoModeracionNot(
+        List<Servicio> servicios = repo.findPropiosActivosByUsuarioId(
                 usuarioId,
-                EstadoModeracion.ELIMINADO_POR_MODERACION
+                ESTADOS_NO_VISIBLES_PUBLICO
         );
+        log.info("PortafolioBackendDebug listado servicios propios usuarioId={} totalActivos={}", usuarioId, servicios.size());
+        return servicios;
     }
 
     @Override
@@ -159,10 +208,15 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional
     public Servicio actualizarServicioDeUsuario(Integer usuarioId, Integer idServicio, ServicioDTO dto) {
+        log.info("ServicioCrudBackendDebug UPDATE recibido usuarioId={} idServicio={}", usuarioId, idServicio);
         Servicio existente = repo.findByIdConCategoria(idServicio)
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
+        log.info("ServicioCrudBackendDebug UPDATE existe=true idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
+                idServicio, obtenerPropietarioId(existente), usuarioId, existente.getOculto(), existente.getEstadoModeracion());
+        validarNoOcultoOEliminado(existente, idServicio);
         validarPertenencia(existente, usuarioId);
+        log.info("ServicioCrudBackendDebug UPDATE validacion propietario OK idServicio={} usuarioId={}", idServicio, usuarioId);
         validarNoRetiradoPorModeracionParaEditar(existente);
 
         if (dto.getTitulo() != null) {
@@ -185,6 +239,8 @@ public class ServicioServiceImpl implements ServicioService {
 
         if (dto.getPrecioMin() != null || dto.getPrecioMax() != null) {
             validarRangoPrecios(dto.getPrecioMin(), dto.getPrecioMax());
+            existente.setPrecioMin(dto.getPrecioMin());
+            existente.setPrecioMax(dto.getPrecioMax());
         }
 
         if (dto.getIdCategoria() != null && dto.getIdCategoria() > 0) {
@@ -192,18 +248,27 @@ public class ServicioServiceImpl implements ServicioService {
         }
 
         Servicio guardado = repo.save(existente);
+        log.info("ServicioCrudBackendDebug UPDATE guardado idServicio={} usuarioId={}", guardado.getIdServicio(), usuarioId);
         return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
     }
 
     @Override
     @Transactional
     public void eliminarServicioDeUsuario(Integer usuarioId, Integer idServicio) {
+        log.info("ServicioCrudBackendDebug DELETE recibido usuarioId={} idServicio={}", usuarioId, idServicio);
         Servicio servicio = repo.findById(idServicio)
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
+        log.info("ServicioCrudBackendDebug DELETE existe=true idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
+                idServicio, obtenerPropietarioId(servicio), usuarioId, servicio.getOculto(), servicio.getEstadoModeracion());
+        validarNoOcultoOEliminado(servicio, idServicio);
         validarPertenencia(servicio, usuarioId);
+        log.info("ServicioCrudBackendDebug DELETE validacion propietario OK idServicio={} usuarioId={}", idServicio, usuarioId);
         validarNoRetiradoPorModeracionParaEliminar(servicio);
         ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
+        int activosDespues = repo.findPropiosActivosByUsuarioId(usuarioId, ESTADOS_NO_VISIBLES_PUBLICO).size();
+        log.info("ServicioCrudBackendDebug DELETE soft delete OK idServicio={} usuarioId={} serviciosActivosDespues={}",
+                idServicio, usuarioId, activosDespues);
     }
 
     @Override
@@ -257,9 +322,32 @@ public class ServicioServiceImpl implements ServicioService {
     }
 
     private void validarPertenencia(Servicio servicio, Integer usuarioId) {
-        if (servicio.getUsuario() == null || !usuarioId.equals(servicio.getUsuario().getIdUsuario())) {
+        Integer propietario = obtenerPropietarioId(servicio);
+        boolean esPropietario = usuarioId != null && usuarioId.equals(propietario);
+        log.info("ServicioCrudBackendDebug validacion propietario idServicio={} usuarioId={} propietario={} resultado={}",
+                servicio != null ? servicio.getIdServicio() : null, usuarioId, propietario, esPropietario);
+        if (!esPropietario) {
             throw new ResponseStatusException(FORBIDDEN, "El servicio no pertenece al usuario indicado");
         }
+    }
+
+    private void validarNoOcultoOEliminado(Servicio servicio, Integer idServicio) {
+        if (estaServicioOcultoOEliminado(servicio)) {
+            log.info("ServicioCrudBackendDebug 404 por servicio oculto/eliminado idServicio={} oculto={} estadoModeracion={}",
+                    idServicio, servicio.getOculto(), servicio.getEstadoModeracion());
+            throw new NoSuchElementException("Servicio no encontrado con ID: " + idServicio);
+        }
+    }
+
+    private boolean estaServicioOcultoOEliminado(Servicio servicio) {
+        return servicio == null
+                || Boolean.TRUE.equals(servicio.getOculto())
+                || servicio.getEstadoModeracion() == EstadoModeracion.OCULTO
+                || servicio.getEstadoModeracion() == EstadoModeracion.ELIMINADO_POR_MODERACION;
+    }
+
+    private Integer obtenerPropietarioId(Servicio servicio) {
+        return servicio != null && servicio.getUsuario() != null ? servicio.getUsuario().getIdUsuario() : null;
     }
 
     private void validarRangoPrecios(BigDecimal min, BigDecimal max) {
@@ -344,5 +432,6 @@ public class ServicioServiceImpl implements ServicioService {
         servicio.setMotivoOculto(motivo);
         servicio.setFechaOculto(LocalDateTime.now());
         repo.save(servicio);
+        log.info("ServicioCrudBackendDebug soft delete ejecutado idServicio={} motivo={}", servicio.getIdServicio(), motivo);
     }
 }

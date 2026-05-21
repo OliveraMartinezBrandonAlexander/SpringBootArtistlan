@@ -22,6 +22,8 @@ public interface ServicioService {
 
     Optional<Servicio> buscarServicioPublicoVisiblePorId(Integer id);
 
+    Optional<Servicio> buscarDetalleVisibleOPropioPorId(Integer id, Integer usuarioId);
+
     Optional<Servicio> actualizarServicio(Integer id, Servicio servicio);
 
     boolean eliminarServicio(Integer id);

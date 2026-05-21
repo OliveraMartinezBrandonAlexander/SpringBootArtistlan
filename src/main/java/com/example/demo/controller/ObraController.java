@@ -9,6 +9,7 @@ import com.example.demo.service.FavoritosService;
 import com.example.demo.service.ObraService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/obras")
 @AllArgsConstructor
+@Slf4j
 public class ObraController {
 
     private final ObraService service;
@@ -65,7 +67,11 @@ public class ObraController {
     @GetMapping("/{id}")
     public ResponseEntity<ObraDTO> obtenerPorId(@PathVariable Integer id,
                                                 @RequestParam(required = false) Integer usuarioId) {
-        return service.buscarPublicaVisiblePorId(id)
+        if (id == null || id <= 0) {
+            log.info("ObraCrudBackendDebug GET detalle 400 idObra={} usuarioId={}", id, usuarioId);
+            return ResponseEntity.badRequest().build();
+        }
+        return service.buscarDetalleVisibleOPropioPorId(id, usuarioId)
                 .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioId)))
                 .orElse(ResponseEntity.notFound().build());
     }

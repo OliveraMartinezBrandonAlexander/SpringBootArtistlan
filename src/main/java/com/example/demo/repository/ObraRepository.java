@@ -18,18 +18,20 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
     @Query("""
             SELECT DISTINCT o
             FROM Obra o
+            JOIN FETCH o.usuario u
             LEFT JOIN FETCH o.categoriaObras co
             LEFT JOIN FETCH co.categoria
-            WHERE o.usuario.idUsuario = :idUsuario
+            WHERE u.idUsuario = :idUsuario
             """)
     List<Obra> findByUsuarioIdUsuario(@Param("idUsuario") Integer idUsuario);
 
     @Query("""
             SELECT DISTINCT o
             FROM Obra o
+            JOIN FETCH o.usuario u
             LEFT JOIN FETCH o.categoriaObras co
             LEFT JOIN FETCH co.categoria
-            WHERE o.usuario.idUsuario = :idUsuario
+            WHERE u.idUsuario = :idUsuario
               AND o.estadoModeracion <> :estadoModeracion
             """)
     List<Obra> findByUsuarioIdUsuarioAndEstadoModeracionNot(@Param("idUsuario") Integer idUsuario,
@@ -38,6 +40,20 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
     @Query("""
             SELECT DISTINCT o
             FROM Obra o
+            JOIN FETCH o.usuario u
+            LEFT JOIN FETCH o.categoriaObras co
+            LEFT JOIN FETCH co.categoria
+            WHERE u.idUsuario = :idUsuario
+              AND COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+            """)
+    List<Obra> findPropiasActivasByUsuarioId(@Param("idUsuario") Integer idUsuario,
+                                             @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion);
+
+    @Query("""
+            SELECT DISTINCT o
+            FROM Obra o
+            LEFT JOIN FETCH o.usuario
             LEFT JOIN FETCH o.categoriaObras co
             LEFT JOIN FETCH co.categoria
             WHERE o.idObra = :idObra
