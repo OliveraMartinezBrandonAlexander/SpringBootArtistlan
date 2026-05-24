@@ -1,5 +1,3 @@
--- Amplía longitud de URLs para imágenes provenientes de Firebase Storage.
--- Seguro: solo modifica tamaño de columnas existentes, sin borrar datos.
 
 ALTER TABLE obra
     MODIFY COLUMN imagen1 VARCHAR(1000) NOT NULL,

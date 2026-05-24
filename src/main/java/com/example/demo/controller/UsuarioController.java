@@ -9,6 +9,8 @@ import com.example.demo.dto.LoginResponse;
 import com.example.demo.dto.PageResponseDTO;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.UsuarioIdCategoriaDTO;
+import com.example.demo.dto.ValidarPasswordRequestDTO;
+import com.example.demo.dto.ValidarPasswordResponseDTO;
 import com.example.demo.enums.EstadoModeracion;
 import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
 import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
@@ -260,6 +262,35 @@ public class UsuarioController {
 
         Usuario actualizado = usuarioRepository.save(usuario);
         return ResponseEntity.ok(convertirADTO(actualizado, null));
+    }
+
+    @PostMapping("/validar-password")
+    public ResponseEntity<ValidarPasswordResponseDTO> validarPasswordActual(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @Valid @RequestBody ValidarPasswordRequestDTO request) {
+        Usuario usuarioAutenticado = obtenerUsuarioAutenticado(authorizationHeader);
+        boolean valida = usuarioService.validarContrasena(usuarioAutenticado, request.getContrasena());
+        if (!valida) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ValidarPasswordResponseDTO.builder()
+                            .valida(false)
+                            .message("Contrasena incorrecta")
+                            .build());
+        }
+        return ResponseEntity.ok(ValidarPasswordResponseDTO.builder()
+                .valida(true)
+                .message("Contrasena correcta")
+                .build());
+    }
+
+    private Usuario obtenerUsuarioAutenticado(String authorizationHeader) {
+        if (!StringUtils.hasText(authorizationHeader) || !authorizationHeader.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token invalido");
+        }
+        String jwt = authorizationHeader.substring(7);
+        Integer idUsuario = jwtService.extraerIdUsuario(jwt);
+        return usuarioRepository.findByIdConCategorias(idUsuario)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
     }
     private UsuarioDTO convertirADTO(Usuario u, Long usuarioIdConsulta) {
         UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()

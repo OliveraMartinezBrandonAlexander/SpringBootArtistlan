@@ -56,7 +56,8 @@ public class SecurityConfig {
                                 "/api/auth/2fa/verify-activation",
                                 "/auth/2fa/verify-activation",
                                 "/api/auth/2fa/disable",
-                                "/auth/2fa/disable")
+                                "/auth/2fa/disable",
+                                "/api/usuarios/validar-password")
                         .authenticated()
                         .requestMatchers("/api/moderacion/**").hasAnyRole("ADMIN", "MODERADOR")
                         .requestMatchers(HttpMethod.PUT, "/api/usuarios/*/rol").hasRole("ADMIN")
