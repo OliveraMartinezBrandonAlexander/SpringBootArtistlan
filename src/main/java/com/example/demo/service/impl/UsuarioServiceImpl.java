@@ -25,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -43,6 +44,8 @@ public class UsuarioServiceImpl implements UsuarioService {
     private static final Pattern BCRYPT_PATTERN = Pattern.compile("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
     private static final int CATEGORIA_USUARIO_MIN = 19;
     private static final int CATEGORIA_USUARIO_MAX = 37;
+    private static final int PASSWORD_MIN_LENGTH = 8;
+    private static final int PASSWORD_MAX_LENGTH = 72;
 
     @Autowired
     private UsuarioRepository repo;
@@ -175,12 +178,27 @@ public class UsuarioServiceImpl implements UsuarioService {
     }
 
     @Override
+    public Usuario validarCuentaRecuperableParaPasswordReset(Usuario usuario) {
+        if (!esCuentaRecuperableParaPasswordReset(usuario)) {
+            throw new ResponseStatusException(FORBIDDEN, "La cuenta no es recuperable.");
+        }
+
+        return usuario;
+    }
+
+    @Override
     public Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo) {
         if (usuarioOCorreo == null || usuarioOCorreo.isBlank()) {
             return Optional.empty();
         }
         String identificador = usuarioOCorreo.trim();
         return repo.findFirstByUsuarioIgnoreCaseOrCorreoIgnoreCase(identificador, identificador);
+    }
+
+    @Override
+    public Optional<Usuario> buscarCuentaRecuperablePorUsuarioOCorreo(String usuarioOCorreo) {
+        return buscarPorUsuarioOCorreo(usuarioOCorreo)
+                .filter(this::esCuentaRecuperableParaPasswordReset);
     }
 
     @Override
@@ -203,6 +221,43 @@ public class UsuarioServiceImpl implements UsuarioService {
         } catch (IllegalArgumentException ex) {
             return false;
         }
+    }
+
+    @Override
+    public void validarNuevaContrasena(String nuevaContrasena, String confirmarContrasena) {
+        if (nuevaContrasena == null || nuevaContrasena.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "nuevaContrasena es obligatoria");
+        }
+        if (confirmarContrasena == null || confirmarContrasena.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "confirmarContrasena es obligatoria");
+        }
+        if (nuevaContrasena.length() < PASSWORD_MIN_LENGTH || nuevaContrasena.length() > PASSWORD_MAX_LENGTH) {
+            throw new ResponseStatusException(
+                    BAD_REQUEST,
+                    "La nueva contrasena debe tener entre " + PASSWORD_MIN_LENGTH + " y " + PASSWORD_MAX_LENGTH + " caracteres."
+            );
+        }
+        if (confirmarContrasena.length() < PASSWORD_MIN_LENGTH || confirmarContrasena.length() > PASSWORD_MAX_LENGTH) {
+            throw new ResponseStatusException(
+                    BAD_REQUEST,
+                    "confirmarContrasena debe tener entre " + PASSWORD_MIN_LENGTH + " y " + PASSWORD_MAX_LENGTH + " caracteres."
+            );
+        }
+        if (!Objects.equals(nuevaContrasena, confirmarContrasena)) {
+            throw new ResponseStatusException(BAD_REQUEST, "Las contrasenas no coinciden.");
+        }
+    }
+
+    @Override
+    public Usuario actualizarContrasenaPorRecuperacion(Usuario usuario, String nuevaContrasena) {
+        Usuario usuarioRecuperable = validarCuentaRecuperableParaPasswordReset(usuario);
+        String contrasenaActual = usuarioRecuperable.getContrasena();
+        if (esHashBCrypt(contrasenaActual) && passwordEncoder.matches(nuevaContrasena, contrasenaActual)) {
+            throw new ResponseStatusException(BAD_REQUEST, "La nueva contrasena debe ser diferente a la actual.");
+        }
+
+        usuarioRecuperable.setContrasena(passwordEncoder.encode(nuevaContrasena));
+        return repo.save(usuarioRecuperable);
     }
 
     @Override
@@ -455,5 +510,13 @@ public class UsuarioServiceImpl implements UsuarioService {
             return contrasena;
         }
         return passwordEncoder.encode(contrasena);
+    }
+
+    private boolean esCuentaRecuperableParaPasswordReset(Usuario usuario) {
+        if (usuario == null || usuario.getEstadoCuenta() == null) {
+            return false;
+        }
+        return usuario.getEstadoCuenta() == EstadoCuenta.ACTIVO
+                || usuario.getEstadoCuenta() == EstadoCuenta.SUSPENDIDO;
     }
 }

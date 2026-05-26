@@ -26,9 +26,17 @@ public interface UsuarioService {
 
     Usuario validarCuentaPuedeAutenticarse(Usuario usuario);
 
+    Usuario validarCuentaRecuperableParaPasswordReset(Usuario usuario);
+
     Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo);
 
+    Optional<Usuario> buscarCuentaRecuperablePorUsuarioOCorreo(String usuarioOCorreo);
+
     boolean validarContrasena(Usuario usuario, String contrasenaPlana);
+
+    void validarNuevaContrasena(String nuevaContrasena, String confirmarContrasena);
+
+    Usuario actualizarContrasenaPorRecuperacion(Usuario usuario, String nuevaContrasena);
 
     RespuestaModeracionDTO desactivarCuenta(Integer idUsuario, DesactivarCuentaRequestDTO request);
 

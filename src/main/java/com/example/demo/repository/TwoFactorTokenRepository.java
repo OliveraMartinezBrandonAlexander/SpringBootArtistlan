@@ -26,6 +26,30 @@ public interface TwoFactorTokenRepository extends JpaRepository<TwoFactorToken, 
 
     @Query("""
             SELECT t FROM TwoFactorToken t
+            WHERE t.temporaryToken = :temporaryToken
+              AND t.purpose = :purpose
+              AND t.used = false
+              AND t.expirationTime > :now
+            ORDER BY t.createdAt DESC
+            """)
+    Optional<TwoFactorToken> findLatestNonExpiredActiveByTemporaryTokenAndPurpose(@Param("temporaryToken") String temporaryToken,
+                                                                                   @Param("purpose") TwoFactorPurpose purpose,
+                                                                                   @Param("now") LocalDateTime now);
+
+    @Query("""
+            SELECT t FROM TwoFactorToken t
+            WHERE t.usuario = :usuario
+              AND t.purpose = :purpose
+              AND t.used = false
+              AND t.expirationTime > :now
+            ORDER BY t.createdAt DESC
+            """)
+    Optional<TwoFactorToken> findLatestNonExpiredActiveByUsuarioAndPurpose(@Param("usuario") Usuario usuario,
+                                                                            @Param("purpose") TwoFactorPurpose purpose,
+                                                                            @Param("now") LocalDateTime now);
+
+    @Query("""
+            SELECT t FROM TwoFactorToken t
             WHERE t.usuario = :usuario
               AND t.purpose = :purpose
               AND t.used = false

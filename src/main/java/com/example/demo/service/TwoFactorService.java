@@ -9,11 +9,17 @@ public interface TwoFactorService {
 
     TwoFactorToken crearTokenActivacionYEnviarCodigo(Usuario usuario);
 
+    TwoFactorToken crearTokenPasswordResetYEnviarCodigo(Usuario usuario);
+
     TwoFactorToken validarCodigoLogin(String temporaryToken, String code);
 
     TwoFactorToken validarCodigoActivacion(Usuario usuario, String code);
 
+    TwoFactorToken validarCodigoPasswordReset(String temporaryToken, String code);
+
     TwoFactorToken reenviarCodigoLogin(String temporaryToken);
 
     TwoFactorToken reenviarCodigoActivacion(Usuario usuario);
+
+    TwoFactorToken reenviarCodigoPasswordReset(String temporaryToken);
 }

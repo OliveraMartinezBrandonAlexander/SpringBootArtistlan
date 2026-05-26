@@ -44,6 +44,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/*/categoria").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/2fa/verify-login", "/auth/2fa/verify-login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/2fa/resend", "/auth/2fa/resend").permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/auth/password-reset/request",
+                                "/api/auth/password-reset/confirm",
+                                "/api/auth/password-reset/resend",
+                                "/auth/password-reset/request",
+                                "/auth/password-reset/confirm",
+                                "/auth/password-reset/resend"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/artistas/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/obras/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/servicios/**").permitAll()

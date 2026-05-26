@@ -6,6 +6,7 @@ import com.example.demo.model.Usuario;
 import com.example.demo.repository.TwoFactorTokenRepository;
 import com.example.demo.service.EmailService;
 import com.example.demo.service.TwoFactorService;
+import com.example.demo.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,11 +28,13 @@ public class TwoFactorServiceImpl implements TwoFactorService {
     private static final int OTP_LENGTH = 6;
     private static final int MAX_ATTEMPTS = 5;
     private static final int EXPIRATION_MINUTES = 5;
+    private static final int PASSWORD_RESET_RESEND_COOLDOWN_SECONDS = 60;
     private static final String TOO_MANY_ATTEMPTS_MESSAGE = "Demasiados intentos. Solicita un nuevo codigo.";
 
     private final TwoFactorTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final UsuarioService usuarioService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -67,6 +70,14 @@ public class TwoFactorServiceImpl implements TwoFactorService {
     }
 
     @Override
+    @Transactional
+    public TwoFactorToken crearTokenPasswordResetYEnviarCodigo(Usuario usuario) {
+        Usuario usuarioRecuperable = usuarioService.validarCuentaRecuperableParaPasswordReset(usuario);
+        validarCooldownSolicitudPasswordReset(usuarioRecuperable, LocalDateTime.now());
+        return crearTokenPasswordResetYEnviarCodigo(usuarioRecuperable, null);
+    }
+
+    @Override
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public TwoFactorToken validarCodigoLogin(String temporaryToken, String code) {
         TwoFactorToken token = tokenRepository.findLatestActiveByTemporaryTokenAndPurpose(temporaryToken, TwoFactorPurpose.LOGIN)
@@ -78,6 +89,14 @@ public class TwoFactorServiceImpl implements TwoFactorService {
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public TwoFactorToken validarCodigoActivacion(Usuario usuario, String code) {
         TwoFactorToken token = tokenRepository.findLatestActiveByUsuarioAndPurpose(usuario, TwoFactorPurpose.ACTIVATION)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Token invalido"));
+        return validarCodigo(token, code);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public TwoFactorToken validarCodigoPasswordReset(String temporaryToken, String code) {
+        TwoFactorToken token = tokenRepository.findLatestActiveByTemporaryTokenAndPurpose(temporaryToken, TwoFactorPurpose.PASSWORD_RESET)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Token invalido"));
         return validarCodigo(token, code);
     }
@@ -99,6 +118,22 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         return crearTokenActivacionYEnviarCodigo(usuario);
     }
 
+    @Override
+    @Transactional
+    public TwoFactorToken reenviarCodigoPasswordReset(String temporaryToken) {
+        LocalDateTime now = LocalDateTime.now();
+        TwoFactorToken currentToken = tokenRepository.findLatestNonExpiredActiveByTemporaryTokenAndPurpose(
+                        temporaryToken,
+                        TwoFactorPurpose.PASSWORD_RESET,
+                        now
+                )
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Token invalido"));
+
+        usuarioService.validarCuentaRecuperableParaPasswordReset(currentToken.getUsuario());
+        validarCooldownReenvioPasswordReset(currentToken, now);
+        return crearTokenPasswordResetYEnviarCodigo(currentToken.getUsuario(), currentToken.getTemporaryToken());
+    }
+
     private TwoFactorToken crearToken(Usuario usuario, TwoFactorPurpose purpose, String temporaryToken, String code) {
         tokenRepository.invalidatePreviousTokens(usuario, purpose);
         LocalDateTime now = LocalDateTime.now();
@@ -115,6 +150,24 @@ public class TwoFactorServiceImpl implements TwoFactorService {
                 .build();
 
         return tokenRepository.save(token);
+    }
+
+    private TwoFactorToken crearTokenPasswordResetYEnviarCodigo(Usuario usuario, String existingTemporaryToken) {
+        Usuario usuarioRecuperable = usuarioService.validarCuentaRecuperableParaPasswordReset(usuario);
+        String code = generarCodigoOtp();
+        String temporaryToken = (existingTemporaryToken != null && !existingTemporaryToken.isBlank())
+                ? existingTemporaryToken
+                : generarTemporaryTokenSeguro();
+
+        TwoFactorToken token = crearToken(usuarioRecuperable, TwoFactorPurpose.PASSWORD_RESET, temporaryToken, code);
+        log.info("Generando OTP para recuperacion de contrasena. usuarioId={}, correoDestino={}",
+                usuarioRecuperable.getIdUsuario(),
+                safeEmail(usuarioRecuperable.getCorreo()));
+        emailService.enviarCodigoRecuperacionContrasena(usuarioRecuperable.getCorreo(), code);
+        log.info("Solicitud de envio OTP recuperacion completada. usuarioId={}, correoDestino={}",
+                usuarioRecuperable.getIdUsuario(),
+                safeEmail(usuarioRecuperable.getCorreo()));
+        return token;
     }
 
     private TwoFactorToken validarCodigo(TwoFactorToken token, String code) {
@@ -167,6 +220,32 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         byte[] randomBytes = new byte[32];
         secureRandom.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private void validarCooldownSolicitudPasswordReset(Usuario usuario, LocalDateTime now) {
+        tokenRepository.findLatestNonExpiredActiveByUsuarioAndPurpose(
+                        usuario,
+                        TwoFactorPurpose.PASSWORD_RESET,
+                        now
+                )
+                .ifPresent(token -> validarCooldownPasswordReset(token, now, "Espera antes de solicitar otro codigo."));
+    }
+
+    private void validarCooldownReenvioPasswordReset(TwoFactorToken token, LocalDateTime now) {
+        validarCooldownPasswordReset(token, now, "Espera antes de solicitar un nuevo codigo.");
+    }
+
+    private void validarCooldownPasswordReset(TwoFactorToken token, LocalDateTime now, String message) {
+        if (token == null || token.getCreatedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Token invalido");
+        }
+
+        if (token.getCreatedAt().plusSeconds(PASSWORD_RESET_RESEND_COOLDOWN_SECONDS).isAfter(now)) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    message
+            );
+        }
     }
 
     private String safeEmail(String email) {
