@@ -123,6 +123,7 @@ public class ServiciosPortafolioPersonalController {
                 .tecnicas(s.getTecnicas())
                 .precioMin(s.getPrecioMin())
                 .precioMax(s.getPrecioMax())
+                .fechaPublicacion(s.getFechaPublicacion())
                 .idUsuario(
                         s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null
                 )

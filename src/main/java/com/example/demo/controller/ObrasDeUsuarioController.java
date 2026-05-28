@@ -169,6 +169,8 @@ public class ObrasDeUsuarioController {
                 .imagen3(o.getImagen3())
                 .tecnicas(o.getTecnicas())
                 .medidas(o.getMedidas())
+                .confirmacionAutoria(o.getConfirmacionAutoria())
+                .fechaPublicacion(o.getFechaPublicacion())
                 .likes(favoritosService.likesPorObra(o.getIdObra().longValue()))
                 .esFavorito(favoritosService.esObraFavorita(usuarioIdConsulta, o.getIdObra()))
                 .idUsuario(idUsuario)

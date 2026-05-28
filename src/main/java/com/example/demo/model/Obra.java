@@ -68,7 +68,7 @@ public class Obra {
     @Builder.Default
     private Boolean confirmacionAutoria = Boolean.FALSE;
 
-    @Column(name = "fecha_publicacion", nullable = false)
+    @Column(name = "fecha_publicacion")
     private LocalDateTime fechaPublicacion;
 
     @ManyToOne(fetch = FetchType.LAZY)

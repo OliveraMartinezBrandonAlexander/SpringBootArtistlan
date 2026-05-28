@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "convocatoria")
@@ -32,4 +33,49 @@ public class Convocatoria {
 
     @Column(name = "enlace", length = 500)
     private String enlace;
+
+    @Column(name = "estado")
+    private String estado;
+
+    @Column(name = "publicada")
+    private Boolean publicada;
+
+    @Column(name = "fecha_publicacion")
+    private LocalDateTime fechaPublicacion;
+
+    @Column(name = "fecha_creacion")
+    private LocalDateTime fechaCreacion;
+
+    @Column(name = "fecha_actualizacion")
+    private LocalDateTime fechaActualizacion;
+
+    @PrePersist
+    public void prePersist() {
+        LocalDateTime ahora = LocalDateTime.now();
+
+        if (estado == null) {
+            estado = "BORRADOR";
+        }
+        if (publicada == null) {
+            publicada = false;
+        }
+        if (fechaCreacion == null) {
+            fechaCreacion = ahora;
+        }
+        if (fechaActualizacion == null) {
+            fechaActualizacion = ahora;
+        }
+        if (Boolean.TRUE.equals(publicada) && fechaPublicacion == null) {
+            fechaPublicacion = ahora;
+        }
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        fechaActualizacion = LocalDateTime.now();
+
+        if (Boolean.TRUE.equals(publicada) && fechaPublicacion == null) {
+            fechaPublicacion = fechaActualizacion;
+        }
+    }
 }

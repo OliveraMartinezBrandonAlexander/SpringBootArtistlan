@@ -289,6 +289,7 @@ public class ServicioServiceImpl implements ServicioService {
         servicio.setPrecioMin(dto.getPrecioMin());
         servicio.setPrecioMax(dto.getPrecioMax());
         servicio.setUsuario(usuario);
+        servicio.setFechaPublicacion(LocalDateTime.now());
 
         Servicio guardado = repo.save(servicio);
         reemplazarCategoria(guardado, dto.getIdCategoria());

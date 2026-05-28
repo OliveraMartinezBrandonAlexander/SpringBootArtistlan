@@ -1,8 +1,10 @@
 package com.example.demo.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -18,6 +20,8 @@ public class ServicioDTO {
     private String tecnicas;
     private BigDecimal precioMin;
     private BigDecimal precioMax;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime fechaPublicacion;
     private Integer likes;
     private Boolean esFavorito;
 

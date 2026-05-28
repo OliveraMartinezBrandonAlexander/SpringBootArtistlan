@@ -140,6 +140,7 @@ public class ObraController {
                 .tecnicas(o.getTecnicas())
                 .medidas(o.getMedidas())
                 .confirmacionAutoria(o.getConfirmacionAutoria())
+                .fechaPublicacion(o.getFechaPublicacion())
                 .likes(likes)
                 .esFavorito(esFavorito)
                 .idUsuario(idUsuario)

@@ -1,8 +1,10 @@
 package com.example.demo.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -20,6 +22,8 @@ public class ObraDTO {
     private String tecnicas;
     private String medidas;
     private Boolean confirmacionAutoria;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime fechaPublicacion;
 
     private Integer likes;
     private Boolean esFavorito;

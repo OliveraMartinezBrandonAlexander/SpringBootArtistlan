@@ -50,6 +50,9 @@ public class Servicio {
     @Column(name = "fecha_oculto")
     private LocalDateTime fechaOculto;
 
+    @Column(name = "fecha_publicacion")
+    private LocalDateTime fechaPublicacion;
+
     @Column(name = "tecnicas", length = 255)
     private String tecnicas;
 
@@ -65,4 +68,11 @@ public class Servicio {
 
     @OneToMany(mappedBy = "servicio", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<CategoriaServicios> categoriasServicios = new HashSet<>();
+
+    @PrePersist
+    public void prePersist() {
+        if (fechaPublicacion == null) {
+            fechaPublicacion = LocalDateTime.now();
+        }
+    }
 }

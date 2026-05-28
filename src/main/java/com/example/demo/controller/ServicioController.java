@@ -103,6 +103,7 @@ public class ServicioController {
                 .tecnicas(s.getTecnicas())
                 .precioMin(s.getPrecioMin())
                 .precioMax(s.getPrecioMax())
+                .fechaPublicacion(s.getFechaPublicacion())
                 .likes(favoritosService.likesPorServicio(s.getIdServicio().longValue()))
                 .esFavorito(favoritosService.esServicioFavorito(usuarioId, s.getIdServicio()))
                 .idUsuario(s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null)
