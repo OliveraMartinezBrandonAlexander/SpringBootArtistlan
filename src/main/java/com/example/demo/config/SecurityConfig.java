@@ -38,6 +38,7 @@ public class SecurityConfig {
                         // Publicos
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/chatbot/message").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/existe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/usuarios").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/*").permitAll()
