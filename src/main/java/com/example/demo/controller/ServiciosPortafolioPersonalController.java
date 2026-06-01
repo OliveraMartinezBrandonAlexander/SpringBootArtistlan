@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ServicioDTO;
 import com.example.demo.model.CategoriaServicios;
 import com.example.demo.model.Servicio;
@@ -25,6 +26,7 @@ public class ServiciosPortafolioPersonalController {
 
     @GetMapping("/{usuarioId}")
     public ResponseEntity<List<ServicioDTO>> obtenerServiciosPorUsuario(@PathVariable Integer usuarioId) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
         log.info("PortafolioBackendDebug GET servicios propios recibido usuarioId={}", usuarioId);
         if (usuarioId == null || usuarioId <= 0) {
             log.info("PortafolioBackendDebug GET servicios propios 400 usuarioId invalido={}", usuarioId);
@@ -47,6 +49,7 @@ public class ServiciosPortafolioPersonalController {
     @PostMapping("/{usuarioId}")
     public ResponseEntity<ServicioDTO> crearServicio(@PathVariable Integer usuarioId,
                                                      @RequestBody ServicioDTO servicioDTO) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
 
         if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
@@ -64,6 +67,7 @@ public class ServiciosPortafolioPersonalController {
     public ResponseEntity<ServicioDTO> actualizarServicio(@PathVariable Integer usuarioId,
                                                           @PathVariable Integer idServicio,
                                                           @RequestBody ServicioDTO servicioActualizado) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
 
         try {
             if (usuarioId == null || usuarioId <= 0 || idServicio == null || idServicio <= 0) {
@@ -84,6 +88,7 @@ public class ServiciosPortafolioPersonalController {
     @DeleteMapping("/{usuarioId}/{idServicio}")
     public ResponseEntity<Void> eliminarServicio(@PathVariable Integer usuarioId,
                                                  @PathVariable Integer idServicio) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
 
         try {
             if (usuarioId == null || usuarioId <= 0 || idServicio == null || idServicio <= 0) {

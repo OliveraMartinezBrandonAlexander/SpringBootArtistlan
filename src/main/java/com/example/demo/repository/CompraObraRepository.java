@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,4 +69,28 @@ public interface CompraObraRepository extends JpaRepository<CompraObra, Integer>
             """)
     int deleteNoVendidasByObraId(@Param("idObra") Integer idObra,
                                  @Param("estadoVentaReal") String estadoVentaReal);
+
+    @Query("""
+            SELECT COUNT(co)
+            FROM CompraObra co
+            WHERE co.vendedor.idUsuario = :idUsuario
+              AND UPPER(co.estado) IN :estados
+              AND COALESCE(co.fechaCaptura, co.fechaCreacion) BETWEEN :inicio AND :fin
+            """)
+    long countVentasCompletadasByVendedorYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                  @Param("estados") List<String> estados,
+                                                  @Param("inicio") LocalDateTime inicio,
+                                                  @Param("fin") LocalDateTime fin);
+
+    @Query("""
+            SELECT SUM(co.monto)
+            FROM CompraObra co
+            WHERE co.vendedor.idUsuario = :idUsuario
+              AND UPPER(co.estado) IN :estados
+              AND COALESCE(co.fechaCaptura, co.fechaCreacion) BETWEEN :inicio AND :fin
+            """)
+    BigDecimal sumIngresosCompletadosByVendedorYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                        @Param("estados") List<String> estados,
+                                                        @Param("inicio") LocalDateTime inicio,
+                                                        @Param("fin") LocalDateTime fin);
 }

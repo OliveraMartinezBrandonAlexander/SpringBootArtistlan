@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ActualizarImagenObraRequestDTO;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.dto.PageResponseDTO;
@@ -34,11 +35,12 @@ public class ObraController {
 
     @GetMapping
     public ResponseEntity<List<ObraDTO>> obtenerTodas(@RequestParam(required = false) Integer usuarioId) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticadoSiExiste();
         List<Obra> obras = service.listarPublicasVisibles();
         if (obras.isEmpty()) return ResponseEntity.noContent().build();
 
         List<ObraDTO> dtos = obras.stream()
-                .map(o -> convertirADTO(o, usuarioId))
+                .map(o -> convertirADTO(o, usuarioConsulta))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
@@ -51,6 +53,7 @@ public class ObraController {
             @RequestParam(required = false) String categoria,
             @RequestParam(required = false) Integer idCategoria,
             @PageableDefault(size = 20, sort = "idObra") Pageable pageable) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticadoSiExiste();
 
         String query = StringUtils.hasText(q) ? q.trim() : null;
         Integer categoriaId = idCategoria;
@@ -59,36 +62,56 @@ public class ObraController {
                 : (StringUtils.hasText(categoria) ? categoria.trim() : null);
 
         Page<ObraDTO> page = service.listarPublicasVisiblesPaginado(query, categoriaNombre, categoriaId, pageable)
-                .map(obra -> convertirADTO(obra, usuarioId));
+                .map(obra -> convertirADTO(obra, usuarioConsulta));
 
         return ResponseEntity.ok(PageResponseDTO.fromPage(page));
+    }
+
+    @GetMapping("/populares")
+    public ResponseEntity<List<ObraDTO>> obtenerPopularesParaCarrusel(
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) Integer limit) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticadoSiExiste();
+        List<Obra> obras = service.obtenerObrasPopularesParaCarrusel(limit);
+        if (obras.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+
+        List<ObraDTO> dtos = obras.stream()
+                .map(o -> convertirADTO(o, usuarioConsulta))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ObraDTO> obtenerPorId(@PathVariable Integer id,
                                                 @RequestParam(required = false) Integer usuarioId) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticadoSiExiste();
         if (id == null || id <= 0) {
             log.info("ObraCrudBackendDebug GET detalle 400 idObra={} usuarioId={}", id, usuarioId);
             return ResponseEntity.badRequest().build();
         }
-        return service.buscarDetalleVisibleOPropioPorId(id, usuarioId)
-                .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioId)))
+        return service.buscarDetalleVisibleOPropioPorId(id, usuarioConsulta)
+                .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioConsulta)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public ResponseEntity<ObraDTO> subirObra(@RequestBody Obra obra,
                                              @RequestParam(required = false) Integer usuarioId) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticado();
         Obra guardada = service.guardar(obra);
-        return ResponseEntity.ok(convertirADTO(guardada, usuarioId));
+        return ResponseEntity.ok(convertirADTO(guardada, usuarioConsulta));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ObraDTO> actualizarPorId(@PathVariable Integer id,
-                                                   @RequestBody Obra nuevosDatos,
+                                                   @RequestBody ObraDTO nuevosDatos,
                                                    @RequestParam(required = false) Integer usuarioId) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticado();
         return service.actualizarObra(id, nuevosDatos)
-                .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioId)))
+                .map(o -> ResponseEntity.ok(convertirADTO(o, usuarioConsulta)))
                 .orElse(ResponseEntity.notFound().build());
     }
 

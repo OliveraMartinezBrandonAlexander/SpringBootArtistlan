@@ -81,6 +81,9 @@ public class Usuario {
     @Column(name = "fecha_fin_suspension")
     private LocalDateTime fechaFinSuspension;
 
+    @Column(name = "fecha_registro", nullable = false, insertable = false, updatable = false)
+    private LocalDateTime fechaRegistro;
+
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL)
     @JsonManagedReference
     private Set<CategoriaUsuarios> categoriasUsuarios = new HashSet<>();

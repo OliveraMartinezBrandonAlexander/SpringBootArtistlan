@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.TransaccionDetalleDTO;
 import com.example.demo.dto.TransaccionResumenDTO;
 import com.example.demo.exception.BusinessException;
@@ -40,15 +41,16 @@ public class TransaccionServiceImpl implements TransaccionService {
     @Override
     @Transactional(readOnly = true)
     public List<TransaccionResumenDTO> obtenerComprasUsuario(Integer idUsuario) {
-        validarUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
 
         List<TransaccionResumenDTO> transacciones = new ArrayList<>();
-        compraObraRepository.findComprasDirectasByCompradorId(idUsuario, ESTADO_TRANSACCION_COMPLETADA)
+        compraObraRepository.findComprasDirectasByCompradorId(idUsuarioAutenticado, ESTADO_TRANSACCION_COMPLETADA)
                 .stream()
                 .map(this::mapearCompraDirecta)
                 .forEach(transacciones::add);
 
-        compraCarritoDetalleRepository.findComprasCarritoByCompradorId(idUsuario, ESTADO_TRANSACCION_COMPLETADA)
+        compraCarritoDetalleRepository.findComprasCarritoByCompradorId(idUsuarioAutenticado, ESTADO_TRANSACCION_COMPLETADA)
                 .stream()
                 .map(this::mapearCompraCarrito)
                 .forEach(transacciones::add);
@@ -59,15 +61,16 @@ public class TransaccionServiceImpl implements TransaccionService {
     @Override
     @Transactional(readOnly = true)
     public List<TransaccionResumenDTO> obtenerVentasUsuario(Integer idUsuario) {
-        validarUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
 
         List<TransaccionResumenDTO> transacciones = new ArrayList<>();
-        compraObraRepository.findVentasDirectasByVendedorId(idUsuario, ESTADO_TRANSACCION_COMPLETADA)
+        compraObraRepository.findVentasDirectasByVendedorId(idUsuarioAutenticado, ESTADO_TRANSACCION_COMPLETADA)
                 .stream()
                 .map(this::mapearCompraDirecta)
                 .forEach(transacciones::add);
 
-        compraCarritoDetalleRepository.findVentasCarritoByVendedorId(idUsuario, ESTADO_TRANSACCION_COMPLETADA)
+        compraCarritoDetalleRepository.findVentasCarritoByVendedorId(idUsuarioAutenticado, ESTADO_TRANSACCION_COMPLETADA)
                 .stream()
                 .map(this::mapearCompraCarrito)
                 .forEach(transacciones::add);
@@ -78,15 +81,16 @@ public class TransaccionServiceImpl implements TransaccionService {
     @Override
     @Transactional(readOnly = true)
     public TransaccionDetalleDTO obtenerDetalleTransaccion(Integer idUsuario, String tipoOrigen, Integer idTransaccion) {
-        validarUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
         if (idTransaccion == null) {
             throw new BusinessException("idTransaccion es obligatorio");
         }
 
         String tipoNormalizado = normalizarTipoOrigen(tipoOrigen);
         return switch (tipoNormalizado) {
-            case TIPO_OBRA_DIRECTA -> obtenerDetalleCompraDirecta(idUsuario, idTransaccion);
-            case TIPO_CARRITO -> obtenerDetalleCompraCarrito(idUsuario, idTransaccion);
+            case TIPO_OBRA_DIRECTA -> obtenerDetalleCompraDirecta(idUsuarioAutenticado, idTransaccion);
+            case TIPO_CARRITO -> obtenerDetalleCompraCarrito(idUsuarioAutenticado, idTransaccion);
             default -> throw new BusinessException("tipoOrigen invalido. Usa OBRA_DIRECTA o CARRITO");
         };
     }

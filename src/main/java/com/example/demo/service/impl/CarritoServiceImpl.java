@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CarritoContactoDTO;
 import com.example.demo.dto.CarritoDTO;
 import com.example.demo.dto.CarritoRequestDTO;
@@ -52,9 +53,10 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional
     public List<CarritoDTO> obtenerCarritoUsuario(Integer idUsuario) {
-        validarUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
 
-        List<Carrito> items = carritoRepository.findByUsuarioId(idUsuario);
+        List<Carrito> items = carritoRepository.findByUsuarioId(idUsuarioAutenticado);
         List<CarritoDTO> activos = new ArrayList<>();
 
         for (Carrito item : items) {
@@ -85,7 +87,9 @@ public class CarritoServiceImpl implements CarritoService {
             throw new BusinessException("idUsuario e idObra son obligatorios");
         }
 
-        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(request.getIdUsuario(), request.getIdObra())
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(request.getIdUsuario());
+
+        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(idUsuarioAutenticado, request.getIdObra())
                 .orElseThrow(() -> new ResourceNotFoundException("La obra no esta en el carrito del usuario"));
 
         cancelarReservaPorEliminacionDeCarrito(carrito);
@@ -94,8 +98,9 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional
     public void limpiarCarritoUsuario(Integer idUsuario) {
-        validarUsuario(idUsuario);
-        List<Carrito> items = carritoRepository.findByUsuarioId(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
+        List<Carrito> items = carritoRepository.findByUsuarioId(idUsuarioAutenticado);
         for (Carrito item : items) {
             cancelarReservaPorEliminacionDeCarrito(item);
         }
@@ -104,7 +109,8 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional
     public CarritoTotalDTO obtenerTotal(Integer idUsuario) {
-        List<CarritoDTO> items = obtenerCarritoUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        List<CarritoDTO> items = obtenerCarritoUsuario(idUsuarioAutenticado);
         BigDecimal total = items.stream()
                 .map(CarritoDTO::getPrecio)
                 .filter(Objects::nonNull)
@@ -119,12 +125,13 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional(readOnly = true)
     public CarritoContactoDTO obtenerContactoVendedor(Integer idUsuario, Integer idObra) {
-        validarUsuario(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuario(idUsuarioAutenticado);
         if (idObra == null) {
             throw new BusinessException("idObra es obligatorio");
         }
 
-        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(idUsuario, idObra)
+        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(idUsuarioAutenticado, idObra)
                 .orElseThrow(() -> new ResourceNotFoundException("La obra no esta en el carrito del usuario"));
 
         Obra obra = carrito.getObra();
@@ -134,7 +141,7 @@ public class CarritoServiceImpl implements CarritoService {
 
         Usuario vendedor = obra.getUsuario();
         return CarritoContactoDTO.builder()
-                .idUsuarioComprador(idUsuario)
+                .idUsuarioComprador(idUsuarioAutenticado)
                 .idObra(idObra)
                 .idVendedor(vendedor.getIdUsuario())
                 .nombreVendedor(vendedor.getNombreCompleto())

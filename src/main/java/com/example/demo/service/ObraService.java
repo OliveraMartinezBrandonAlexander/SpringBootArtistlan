@@ -12,11 +12,12 @@ public interface ObraService {
     Obra guardar(Obra o);
     List<Obra> listar();
     List<Obra> listarPublicasVisibles();
+    List<Obra> obtenerObrasPopularesParaCarrusel(Integer limit);
     Page<Obra> listarPublicasVisiblesPaginado(String q, String categoria, Integer idCategoria, Pageable pageable);
     Optional<Obra> buscarPorId(Integer id);
     Optional<Obra> buscarPublicaVisiblePorId(Integer id);
     Optional<Obra> buscarDetalleVisibleOPropioPorId(Integer id, Integer usuarioId);
-    Optional<Obra> actualizarObra(Integer id, Obra obra);
+    Optional<Obra> actualizarObra(Integer id, ObraDTO obra);
     boolean eliminar(Integer id);
     Optional<Obra> actualizarImagen1(Integer id, String urlImagen);
     Obra guardarObraConCategoria(Integer usuarioId, ObraDTO obraDTO);

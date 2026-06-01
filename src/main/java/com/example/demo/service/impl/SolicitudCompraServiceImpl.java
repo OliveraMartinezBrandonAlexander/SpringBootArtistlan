@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.solicitud.CrearSolicitudCompraRequestDTO;
 import com.example.demo.dto.solicitud.SolicitudCompraDTO;
 import com.example.demo.exception.BusinessException;
@@ -42,11 +43,12 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Transactional
     public SolicitudCompraDTO crearSolicitud(CrearSolicitudCompraRequestDTO request) {
         validarCrearRequest(request);
+        Integer idCompradorAutenticado = validarActorAutenticado(request.getIdComprador(), "No puedes crear solicitudes para otro usuario");
 
         Obra obra = obraRepository.findById(request.getIdObra())
                 .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada"));
 
-        Usuario comprador = usuarioRepository.findById(request.getIdComprador())
+        Usuario comprador = usuarioRepository.findById(idCompradorAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Comprador no encontrado"));
 
         Usuario vendedor = obra.getUsuario();
@@ -93,42 +95,46 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional(readOnly = true)
     public List<SolicitudCompraDTO> listarRecibidas(Integer vendedorId) {
-        validarUsuarioExiste(vendedorId, "Vendedor no encontrado");
-        return solicitudRepository.findRecibidas(vendedorId).stream().map(this::toDto).toList();
+        Integer idVendedorAutenticado = validarActorAutenticado(vendedorId, "No puedes consultar solicitudes recibidas de otro usuario");
+        validarUsuarioExiste(idVendedorAutenticado, "Vendedor no encontrado");
+        return solicitudRepository.findRecibidas(idVendedorAutenticado).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<SolicitudCompraDTO> listarEnviadas(Integer compradorId) {
-        validarUsuarioExiste(compradorId, "Comprador no encontrado");
-        return solicitudRepository.findEnviadas(compradorId).stream().map(this::toDto).toList();
+        Integer idCompradorAutenticado = validarActorAutenticado(compradorId, "No puedes consultar solicitudes enviadas de otro usuario");
+        validarUsuarioExiste(idCompradorAutenticado, "Comprador no encontrado");
+        return solicitudRepository.findEnviadas(idCompradorAutenticado).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SolicitudCompraDTO> listarRecibidasPaginadas(Integer vendedorId, String estado, Pageable pageable) {
-        validarUsuarioExiste(vendedorId, "Vendedor no encontrado");
+        Integer idVendedorAutenticado = validarActorAutenticado(vendedorId, "No puedes consultar solicitudes recibidas de otro usuario");
+        validarUsuarioExiste(idVendedorAutenticado, "Vendedor no encontrado");
         String estadoNormalizado = normalizarTextoOpcional(estado);
-        return solicitudRepository.findRecibidasPaginadas(vendedorId, estadoNormalizado, pageable)
+        return solicitudRepository.findRecibidasPaginadas(idVendedorAutenticado, estadoNormalizado, pageable)
                 .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SolicitudCompraDTO> listarEnviadasPaginadas(Integer compradorId, String estado, Pageable pageable) {
-        validarUsuarioExiste(compradorId, "Comprador no encontrado");
+        Integer idCompradorAutenticado = validarActorAutenticado(compradorId, "No puedes consultar solicitudes enviadas de otro usuario");
+        validarUsuarioExiste(idCompradorAutenticado, "Comprador no encontrado");
         String estadoNormalizado = normalizarTextoOpcional(estado);
-        return solicitudRepository.findEnviadasPaginadas(compradorId, estadoNormalizado, pageable)
+        return solicitudRepository.findEnviadasPaginadas(idCompradorAutenticado, estadoNormalizado, pageable)
                 .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SolicitudCompraDTO obtenerDetalle(Integer idSolicitud, Integer actorId) {
-        validarIdRequerido(actorId, "actorId es obligatorio");
-        validarUsuarioExiste(actorId, "Actor no encontrado");
+        Integer idActorAutenticado = validarActorAutenticado(actorId, "No puedes consultar solicitudes como otro usuario");
+        validarUsuarioExiste(idActorAutenticado, "Actor no encontrado");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
-        if (!actorId.equals(solicitud.getComprador().getIdUsuario()) && !actorId.equals(solicitud.getVendedor().getIdUsuario())) {
+        if (!idActorAutenticado.equals(solicitud.getComprador().getIdUsuario()) && !idActorAutenticado.equals(solicitud.getVendedor().getIdUsuario())) {
             throw new BusinessException("No puedes consultar esta solicitud");
         }
         return toDto(solicitud);
@@ -137,9 +143,9 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO aceptar(Integer idSolicitud, Integer idVendedor) {
-        validarIdRequerido(idVendedor, "idVendedor es obligatorio");
+        Integer idVendedorAutenticado = validarActorAutenticado(idVendedor, "No puedes aceptar solicitudes como otro usuario");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
-        validarAccionVendedor(solicitud, idVendedor);
+        validarAccionVendedor(solicitud, idVendedorAutenticado);
 
         if (!"PENDIENTE".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
             throw new BusinessException("Solo se pueden aceptar solicitudes PENDIENTE");
@@ -201,7 +207,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
             notificacionService.crearNotificacionUsuario(
                     pendiente.getComprador().getIdUsuario(),
-                    idVendedor,
+                    idVendedorAutenticado,
                     "SOLICITUD_CANCELADA",
                     "Solicitud cancelada",
                     "Tu solicitud para '" + obra.getTitulo() + "' fue cancelada porque se acepto otra solicitud.",
@@ -212,7 +218,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
         notificacionService.crearNotificacionUsuario(
                 solicitud.getComprador().getIdUsuario(),
-                idVendedor,
+                idVendedorAutenticado,
                 "SOLICITUD_ACEPTADA",
                 "Solicitud aceptada",
                 "Tu solicitud para '" + obra.getTitulo() + "' fue aceptada. Tienes 7 dias para completar el pago.",
@@ -226,9 +232,9 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO rechazar(Integer idSolicitud, Integer idVendedor, String motivo) {
-        validarIdRequerido(idVendedor, "idVendedor es obligatorio");
+        Integer idVendedorAutenticado = validarActorAutenticado(idVendedor, "No puedes rechazar solicitudes como otro usuario");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
-        validarAccionVendedor(solicitud, idVendedor);
+        validarAccionVendedor(solicitud, idVendedorAutenticado);
 
         if (!"PENDIENTE".equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
             throw new BusinessException("Solo se pueden rechazar solicitudes PENDIENTE");
@@ -242,7 +248,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
         notificacionService.crearNotificacionUsuario(
                 solicitud.getComprador().getIdUsuario(),
-                idVendedor,
+                idVendedorAutenticado,
                 "SOLICITUD_RECHAZADA",
                 "Solicitud rechazada",
                 construirMensajeRechazo(solicitud.getObra().getTitulo(), motivoNormalizado),
@@ -256,9 +262,9 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional
     public SolicitudCompraDTO cancelar(Integer idSolicitud, Integer idComprador) {
-        validarIdRequerido(idComprador, "idComprador es obligatorio");
+        Integer idCompradorAutenticado = validarActorAutenticado(idComprador, "No puedes cancelar solicitudes como otro usuario");
         SolicitudCompraObra solicitud = obtenerSolicitudDetallada(idSolicitud);
-        if (!idComprador.equals(solicitud.getComprador().getIdUsuario())) {
+        if (!idCompradorAutenticado.equals(solicitud.getComprador().getIdUsuario())) {
             throw new BusinessException("Solo el comprador puede cancelar su solicitud");
         }
 
@@ -279,8 +285,8 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
 
         String tituloObra = solicitud.getObra() != null ? solicitud.getObra().getTitulo() : "la obra";
         notificacionService.crearNotificacionUsuario(
-                idComprador,
-                idComprador,
+                idCompradorAutenticado,
+                idCompradorAutenticado,
                 "SOLICITUD_CANCELADA",
                 "Solicitud cancelada",
                 "Cancelaste tu solicitud para '" + tituloObra + "'.",
@@ -291,7 +297,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         if (solicitud.getVendedor() != null) {
             notificacionService.crearNotificacionUsuario(
                     solicitud.getVendedor().getIdUsuario(),
-                    idComprador,
+                    idCompradorAutenticado,
                     "SOLICITUD_CANCELADA",
                     "Solicitud cancelada",
                     "El comprador cancelo la solicitud para '" + tituloObra + "'.",
@@ -306,8 +312,9 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
     @Override
     @Transactional(readOnly = true)
     public long contarPendientesUsuario(Integer usuarioId) {
-        validarUsuarioExiste(usuarioId, "Usuario no encontrado");
-        return solicitudRepository.contarPendientesDeUsuario(usuarioId);
+        Integer idUsuarioAutenticado = validarActorAutenticado(usuarioId, "No puedes consultar pendientes de otro usuario");
+        validarUsuarioExiste(idUsuarioAutenticado, "Usuario no encontrado");
+        return solicitudRepository.contarPendientesDeUsuario(idUsuarioAutenticado);
     }
 
     @Override
@@ -343,6 +350,18 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         if (id == null) {
             throw new BusinessException(mensaje);
         }
+    }
+
+    private Integer validarActorAutenticado(Integer idActorRecibido, String mensajeForbidden) {
+        validarIdRequerido(idActorRecibido, "idUsuario es obligatorio");
+        Integer idActorAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (!idActorAutenticado.equals(idActorRecibido)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    mensajeForbidden
+            );
+        }
+        return idActorAutenticado;
     }
 
     private void validarUsuarioExiste(Integer idUsuario, String mensajeNoEncontrado) {

@@ -1,8 +1,10 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.FavoritosDTO;
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
+import com.example.demo.enums.TipoMetaPersonal;
 import com.example.demo.model.Favoritos;
 import com.example.demo.model.Obra;
 import com.example.demo.model.Servicio;
@@ -12,13 +14,18 @@ import com.example.demo.repository.ObraRepository;
 import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.FavoritosService;
+import com.example.demo.service.MetaPersonalService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.EnumSet;
 import java.util.List;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @Service
 @RequiredArgsConstructor
@@ -34,14 +41,16 @@ public class FavoritosServiceImpl implements FavoritosService {
     private final UsuarioRepository usuarioRepository;
     private final ObraRepository obraRepository;
     private final ServicioRepository servicioRepository;
+    private final MetaPersonalService metaPersonalService;
 
     @Override
     @Transactional
     public Favoritos agregarFavorito(FavoritosDTO dto) {
         validarTargetUnico(dto);
+        Integer idUsuarioAutenticado = validarActorAutenticado(dto.getIdUsuario());
 
-        Usuario usuario = usuarioRepository.findById(dto.getIdUsuario())
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado: " + dto.getIdUsuario()));
+        Usuario usuario = usuarioRepository.findById(idUsuarioAutenticado)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado: " + idUsuarioAutenticado));
 
         Favoritos favorito = Favoritos.builder().usuario(usuario).build();
 
@@ -66,7 +75,12 @@ public class FavoritosServiceImpl implements FavoritosService {
         }
 
         try {
-            return favoritosRepository.save(favorito);
+            Favoritos guardado = favoritosRepository.save(favorito);
+            Integer idUsuarioReceptor = obtenerIdUsuarioReceptor(guardado);
+            if (idUsuarioReceptor != null) {
+                metaPersonalService.evaluarMetasDelUsuarioPorTipos(idUsuarioReceptor, EnumSet.of(TipoMetaPersonal.FAVORITOS));
+            }
+            return guardado;
         } catch (DataIntegrityViolationException ex) {
             throw new IllegalStateException("El favorito ya existe para este usuario");
         }
@@ -76,23 +90,20 @@ public class FavoritosServiceImpl implements FavoritosService {
     @Transactional
     public void eliminarFavorito(FavoritosDTO dto) {
         validarTargetUnico(dto);
-
-        if (dto.getIdUsuario() == null) {
-            throw new IllegalArgumentException("idUsuario es obligatorio");
-        }
+        Integer idUsuarioAutenticado = validarActorAutenticado(dto.getIdUsuario());
 
         Favoritos favorito = null;
         if (dto.getIdObra() != null) {
             favorito = favoritosRepository
-                    .findByUsuarioIdUsuarioAndObraIdObra(dto.getIdUsuario(), dto.getIdObra())
+                    .findByUsuarioIdUsuarioAndObraIdObra(idUsuarioAutenticado, dto.getIdObra())
                     .orElseThrow(() -> new EntityNotFoundException("Favorito de obra no encontrado"));
         } else if (dto.getIdServicio() != null) {
             favorito = favoritosRepository
-                    .findByUsuarioIdUsuarioAndServicioIdServicio(dto.getIdUsuario(), dto.getIdServicio())
+                    .findByUsuarioIdUsuarioAndServicioIdServicio(idUsuarioAutenticado, dto.getIdServicio())
                     .orElseThrow(() -> new EntityNotFoundException("Favorito de servicio no encontrado"));
         } else if (dto.getIdArtista() != null) {
             favorito = favoritosRepository
-                    .findByUsuarioIdUsuarioAndArtistaIdUsuario(dto.getIdUsuario(), dto.getIdArtista())
+                    .findByUsuarioIdUsuarioAndArtistaIdUsuario(idUsuarioAutenticado, dto.getIdArtista())
                     .orElseThrow(() -> new EntityNotFoundException("Favorito de artista no encontrado"));
         }
 
@@ -102,6 +113,10 @@ public class FavoritosServiceImpl implements FavoritosService {
     @Override
     @Transactional(readOnly = true)
     public List<Favoritos> obtenerFavoritosPorUsuario(Long idUsuario) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (idUsuario == null || !Long.valueOf(idUsuarioAutenticado).equals(idUsuario)) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes consultar favoritos de otro usuario");
+        }
         return favoritosRepository.findByIdUsuario(idUsuario);
     }
 
@@ -162,6 +177,18 @@ public class FavoritosServiceImpl implements FavoritosService {
         }
     }
 
+    private Integer validarActorAutenticado(Integer idUsuarioRecibido) {
+        if (idUsuarioRecibido == null) {
+            throw new IllegalArgumentException("idUsuario es obligatorio");
+        }
+
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (!idUsuarioAutenticado.equals(idUsuarioRecibido)) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes operar favoritos como otro usuario");
+        }
+        return idUsuarioAutenticado;
+    }
+
     private void validarObraDisponibleParaFavoritos(Obra obra) {
         if (obra == null) {
             return;
@@ -190,5 +217,21 @@ public class FavoritosServiceImpl implements FavoritosService {
         }
         return usuario.getEstadoCuenta() != EstadoCuenta.DESACTIVADO
                 && usuario.getEstadoCuenta() != EstadoCuenta.BLOQUEADO_PERMANENTE;
+    }
+
+    private Integer obtenerIdUsuarioReceptor(Favoritos favorito) {
+        if (favorito == null) {
+            return null;
+        }
+        if (favorito.getObra() != null && favorito.getObra().getUsuario() != null) {
+            return favorito.getObra().getUsuario().getIdUsuario();
+        }
+        if (favorito.getServicio() != null && favorito.getServicio().getUsuario() != null) {
+            return favorito.getServicio().getUsuario().getIdUsuario();
+        }
+        if (favorito.getArtista() != null) {
+            return favorito.getArtista().getIdUsuario();
+        }
+        return null;
     }
 }

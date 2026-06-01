@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CarritoDTO;
 import com.example.demo.dto.CarritoContactoDTO;
 import com.example.demo.dto.CarritoRequestDTO;
@@ -42,6 +43,7 @@ public class CarritoController {
     @DeleteMapping("/{idUsuario}")
     public ResponseEntity<Void> limpiarCarrito(@PathVariable Integer idUsuario,
                                                @RequestParam(name = "confirmar", defaultValue = "false") boolean confirmar) {
+        SecurityUtils.validarAccesoUsuario(idUsuario);
         if (!confirmar) {
             throw new BusinessException("Operacion sensible: confirma con ?confirmar=true para limpiar todo el carrito.");
         }

@@ -1,13 +1,16 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CapturarOrdenPaypalResponseDTO;
 import com.example.demo.dto.CrearOrdenPaypalResponseDTO;
+import com.example.demo.enums.TipoMetaPersonal;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
 import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.CompraObraRepository;
 import com.example.demo.repository.SolicitudCompraObraRepository;
+import com.example.demo.service.MetaPersonalService;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalPagoService;
@@ -18,11 +21,13 @@ import com.paypal.orders.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,17 +45,28 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private final CompraObraRepository compraObraRepository;
     private final SolicitudCompraObraRepository solicitudCompraObraRepository;
     private final ObraService obraService;
+    private final MetaPersonalService metaPersonalService;
     private final NotificacionService notificacionService;
 
     @Override
     public CrearOrdenPaypalResponseDTO crearOrdenParaObra(Integer idObra, Integer compradorId) {
-        Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(compradorId, idObra)
+        Integer idCompradorAutenticado = validarCompradorAutenticado(compradorId);
+        Obra obraBuscada = obraService.buscarPorId(idObra)
+                .orElseThrow(() -> new ResourceNotFoundException("No existe la obra indicada"));
+
+        Integer idVendedor = obraBuscada.getUsuario() != null ? obraBuscada.getUsuario().getIdUsuario() : null;
+        if (idVendedor != null && idVendedor.equals(idCompradorAutenticado)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes comprar tu propia obra.");
+        }
+
+        Carrito carrito = carritoRepository.findDetalleByUsuarioYObra(idCompradorAutenticado, idObra)
                 .orElseThrow(() -> new BusinessException("La obra no esta reservada para este comprador"));
 
         Obra obra = carrito.getObra();
         SolicitudCompraObra solicitud = carrito.getSolicitud();
 
-        validarFlujoReserva(obra, solicitud, compradorId, carrito.getReservadaHasta());
+        validarFlujoReserva(obra, solicitud, idCompradorAutenticado, carrito.getReservadaHasta());
         Optional<CompraObra> compraExistente = Optional.empty();
         if (solicitud.getIdSolicitud() != null) {
             compraExistente = compraObraRepository.findBySolicitudIdSolicitud(solicitud.getIdSolicitud());
@@ -91,19 +107,23 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     @Override
     @Transactional
     public CapturarOrdenPaypalResponseDTO capturarOrden(String paypalOrderId) {
+        Integer idCompradorAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
         CompraObra compra = compraObraRepository.findByPaypalOrderId(paypalOrderId)
                 .orElseThrow(() -> new ResourceNotFoundException("No existe compra para esa orden PayPal"));
 
-        if (ESTADO_CAPTURADA.equalsIgnoreCase(compra.getEstado())) {
-            throw new BusinessException("La orden ya fue capturada");
+        validarOrdenPerteneceAlComprador(compra, idCompradorAutenticado);
+        validarEstadoCapturable(compra.getEstado(), "La orden ya fue capturada", "La orden no esta en un estado valido para captura");
+
+        if (compra.getObra() == null || compra.getObra().getIdObra() == null) {
+            throw new ResourceNotFoundException("No existe la obra asociada a la orden PayPal");
         }
 
         Carrito carrito = carritoRepository.findByUsuarioIdUsuarioAndObraIdObra(
-                        compra.getComprador().getIdUsuario(),
+                        idCompradorAutenticado,
                         compra.getObra().getIdObra())
                 .orElseThrow(() -> new BusinessException("La reserva ya no esta activa"));
 
-        validarFlujoReserva(compra.getObra(), compra.getSolicitud(), compra.getComprador().getIdUsuario(), carrito.getReservadaHasta());
+        validarFlujoReserva(compra.getObra(), compra.getSolicitud(), idCompradorAutenticado, carrito.getReservadaHasta());
 
         try {
             OrdersCaptureRequest request = new OrdersCaptureRequest(paypalOrderId);
@@ -153,6 +173,11 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
                     compra.getObra().getIdObra()
             );
 
+            metaPersonalService.evaluarMetasDelUsuarioPorTipos(
+                    compra.getVendedor().getIdUsuario(),
+                    EnumSet.of(TipoMetaPersonal.VENTAS, TipoMetaPersonal.INGRESOS)
+            );
+
             return CapturarOrdenPaypalResponseDTO.builder()
                     .idCompra(compra.getIdCompra())
                     .idObra(compra.getObra().getIdObra())
@@ -172,6 +197,10 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
     private void validarFlujoReserva(Obra obra, SolicitudCompraObra solicitud, Integer compradorId, LocalDateTime reservadaHasta) {
         if (obra == null || solicitud == null) {
             throw new BusinessException("Reserva invalida");
+        }
+        if (obra.getUsuario() != null && compradorId.equals(obra.getUsuario().getIdUsuario())) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes comprar tu propia obra.");
         }
         if (!"RESERVADA".equalsIgnoreCase(obra.getEstado())) {
             throw new BusinessException("La obra debe estar reservada para pagar");
@@ -297,6 +326,35 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         }
         String sufijo = (detalle == null || detalle.isBlank()) ? "" : " Detalle: " + detalle;
         return new BusinessException("No se pudo " + accion + " en PayPal." + sufijo);
+    }
+
+    private Integer validarCompradorAutenticado(Integer compradorId) {
+        Integer idCompradorAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (compradorId != null && !compradorId.equals(idCompradorAutenticado)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes crear una compra usando otro comprador.");
+        }
+        return idCompradorAutenticado;
+    }
+
+    private void validarOrdenPerteneceAlComprador(CompraObra compra, Integer idCompradorAutenticado) {
+        Integer idCompradorOrden = compra.getComprador() != null ? compra.getComprador().getIdUsuario() : null;
+        if (idCompradorOrden == null) {
+            throw new BusinessException("La orden PayPal no tiene comprador asociado");
+        }
+        if (!idCompradorOrden.equals(idCompradorAutenticado)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes capturar una orden PayPal de otro usuario.");
+        }
+    }
+
+    private void validarEstadoCapturable(String estadoActual, String mensajeYaCapturada, String mensajeEstadoInvalido) {
+        if (ESTADO_CAPTURADA.equalsIgnoreCase(estadoActual)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, mensajeYaCapturada);
+        }
+        if (!ESTADO_CREADA.equalsIgnoreCase(estadoActual)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, mensajeEstadoInvalido);
+        }
     }
 }
 

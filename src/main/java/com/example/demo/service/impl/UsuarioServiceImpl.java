@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.UsuarioDTO;
 import com.example.demo.dto.moderacion.DesactivarCuentaRequestDTO;
 import com.example.demo.dto.moderacion.RespuestaModeracionDTO;
@@ -78,26 +79,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     public Usuario crearUsuarioConCategoria(UsuarioDTO dto) {
         validarTelefono(dto.getTelefono());
         Usuario usuario = convertirAEntidad(dto);
-        Usuario guardado = repo.save(usuario);
-
-        if (dto.getIdCategoria() != null && dto.getIdCategoria() > 0) {
-            validarCategoriaUsuario(dto.getIdCategoria());
-            if (guardado.getCategoriasUsuarios() == null || guardado.getCategoriasUsuarios().isEmpty()) {
-                Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
-                        .orElseThrow(() -> new RuntimeException("Categoria no encontrada"));
-
-                CategoriaUsuarios cu = new CategoriaUsuarios();
-                CategoriaUsuariosID id = new CategoriaUsuariosID(guardado.getIdUsuario(), categoria.getIdCategoria());
-                cu.setId(id);
-                cu.setUsuario(guardado);
-                cu.setCategoria(categoria);
-
-                categoriaUsuariosRepository.save(cu);
-                guardado.getCategoriasUsuarios().add(cu);
-            }
-        }
-
-        return guardado;
+        return repo.save(usuario);
     }
 
     @Override
@@ -265,30 +247,21 @@ public class UsuarioServiceImpl implements UsuarioService {
         if (request == null) {
             throw new ResponseStatusException(BAD_REQUEST, "El request para desactivar cuenta es obligatorio");
         }
-        if (idUsuario == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "idUsuario es obligatorio");
-        }
-        if (request.getIdUsuarioSolicitante() == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "idUsuarioSolicitante es obligatorio");
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        if (request.getIdUsuarioSolicitante() != null
+                && !idUsuarioAutenticado.equals(request.getIdUsuarioSolicitante())) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes desactivar una cuenta usando otro usuario solicitante.");
         }
         if (!Boolean.TRUE.equals(request.getConfirmacion())) {
             throw new ResponseStatusException(BAD_REQUEST, "confirmacion debe ser true");
         }
 
-        Usuario solicitante = repo.findById(request.getIdUsuarioSolicitante())
+        Usuario solicitante = repo.findById(idUsuarioAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario solicitante no encontrado"));
 
-        Usuario usuarioObjetivo = repo.findById(idUsuario)
+        Usuario usuarioObjetivo = repo.findById(idUsuarioAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario objetivo no encontrado"));
-
-        boolean esMismoUsuario = solicitante.getIdUsuario() != null
-                && solicitante.getIdUsuario().equals(usuarioObjetivo.getIdUsuario());
-        boolean esAdmin = "ADMIN".equalsIgnoreCase(solicitante.getRol());
-
-        if (!esMismoUsuario && !esAdmin) {
-            throw new ResponseStatusException(FORBIDDEN, "No tienes permisos para desactivar esta cuenta");
-        }
-        validarContrasenaActualSiAplica(request, solicitante, esMismoUsuario);
+        validarContrasenaActualSiAplica(request, solicitante, true);
 
         String motivo = normalizarMotivoDesactivacion(request.getMotivo());
         desactivarUsuario(usuarioObjetivo, motivo);
@@ -303,7 +276,8 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public Optional<Usuario> actualizarFotoPerfil(Integer id, String urlFoto) {
-        return repo.findById(id).map(u -> {
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(id);
+        return repo.findById(idUsuarioAutenticado).map(u -> {
             u.setFotoPerfil(urlFoto);
             return repo.save(u);
         });
@@ -311,11 +285,12 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public Optional<Usuario> actualizarRol(Integer id, String nuevoRol, Integer adminId) {
-        if (adminId == null) {
-            throw new IllegalArgumentException("adminId es obligatorio para cambiar roles");
+        Integer idAdminAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (adminId != null && !adminId.equals(idAdminAutenticado)) {
+            throw new SecurityException("No puedes actuar como otro administrador");
         }
 
-        Usuario admin = repo.findById(adminId)
+        Usuario admin = repo.findById(idAdminAutenticado)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario administrador no encontrado"));
 
         if (!"ADMIN".equalsIgnoreCase(admin.getRol())) {
@@ -335,16 +310,17 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public Usuario actualizarUsuarioConCategoria(Integer id, UsuarioDTO dto) {
-        Usuario usuario = repo.findByIdConCategorias(id)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Usuario no encontrado con ID: " + id));
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(id);
+        Usuario usuario = repo.findByIdConCategorias(idUsuarioAutenticado)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Usuario no encontrado con ID: " + idUsuarioAutenticado));
 
         String usuarioNormalizado = normalizeRequired(dto.getUsuario(), "El nombre de usuario es obligatorio.");
         String correoNormalizado = normalizeRequired(dto.getCorreo(), "El correo es obligatorio.");
 
-        if (repo.existsByUsuarioIgnoreCaseAndIdUsuarioNot(usuarioNormalizado, id)) {
+        if (repo.existsByUsuarioIgnoreCaseAndIdUsuarioNot(usuarioNormalizado, idUsuarioAutenticado)) {
             throw new BusinessException("El nombre de usuario ya está en uso.");
         }
-        if (repo.existsByCorreoIgnoreCaseAndIdUsuarioNot(correoNormalizado, id)) {
+        if (repo.existsByCorreoIgnoreCaseAndIdUsuarioNot(correoNormalizado, idUsuarioAutenticado)) {
             throw new BusinessException("El correo ya está en uso.");
         }
 
@@ -360,7 +336,7 @@ public class UsuarioServiceImpl implements UsuarioService {
                 usuario.setCategoriasUsuarios(new HashSet<>());
             }
             usuario.getCategoriasUsuarios().clear();
-            categoriaUsuariosRepository.deleteByUsuarioId(id);
+            categoriaUsuariosRepository.deleteByUsuarioId(idUsuarioAutenticado);
 
             Categoria categoria = categoriaRepository.findById(dto.getIdCategoria())
                     .orElseThrow(() -> new java.util.NoSuchElementException("Categoria no encontrada con ID: " + dto.getIdCategoria()));

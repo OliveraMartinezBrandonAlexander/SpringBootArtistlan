@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface CompraCarritoDetalleRepository extends JpaRepository<CompraCarritoDetalle, Integer> {
@@ -63,4 +65,30 @@ public interface CompraCarritoDetalleRepository extends JpaRepository<CompraCarr
             """)
     int deleteNoVendidasByObraId(@Param("idObra") Integer idObra,
                                  @Param("estadoVentaReal") String estadoVentaReal);
+
+    @Query("""
+            SELECT COUNT(d)
+            FROM CompraCarritoDetalle d
+            JOIN d.compraCarrito cc
+            WHERE d.vendedor.idUsuario = :idUsuario
+              AND UPPER(cc.estado) IN :estados
+              AND COALESCE(cc.fechaCaptura, cc.fechaCreacion) BETWEEN :inicio AND :fin
+            """)
+    long countVentasCompletadasByVendedorYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                  @Param("estados") List<String> estados,
+                                                  @Param("inicio") LocalDateTime inicio,
+                                                  @Param("fin") LocalDateTime fin);
+
+    @Query("""
+            SELECT SUM(d.precioUnitario)
+            FROM CompraCarritoDetalle d
+            JOIN d.compraCarrito cc
+            WHERE d.vendedor.idUsuario = :idUsuario
+              AND UPPER(cc.estado) IN :estados
+              AND COALESCE(cc.fechaCaptura, cc.fechaCreacion) BETWEEN :inicio AND :fin
+            """)
+    BigDecimal sumIngresosCompletadosByVendedorYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                        @Param("estados") List<String> estados,
+                                                        @Param("inicio") LocalDateTime inicio,
+                                                        @Param("fin") LocalDateTime fin);
 }

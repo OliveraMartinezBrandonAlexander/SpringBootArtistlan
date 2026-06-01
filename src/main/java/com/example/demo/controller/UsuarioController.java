@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ActualizarFotoPerfilRequestDTO;
 import com.example.demo.dto.ArtistaResumenDTO;
 import com.example.demo.dto.AuthErrorResponseDTO;
@@ -83,11 +84,12 @@ public class UsuarioController {
 
     @GetMapping
     public ResponseEntity<List<UsuarioDTO>> obtenerTodos(@RequestParam(required = false) Long usuarioId) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticado();
         List<Usuario> usuarios = usuarioRepository.findAllConCategoriasByEstadoCuentaNotIn(ESTADOS_NO_PUBLICOS);
         if (usuarios.isEmpty()) return ResponseEntity.noContent().build();
 
         List<UsuarioDTO> dtos = usuarios.stream()
-                .map(u -> convertirADTO(u, usuarioId))
+                .map(u -> convertirADTOPublico(u, usuarioConsulta.longValue()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
@@ -124,6 +126,7 @@ public class UsuarioController {
             @RequestParam(required = false) Integer idCategoria,
             @PageableDefault(size = 10, sort = "idUsuario") Pageable pageable
     ) {
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticado();
         String query = StringUtils.hasText(q) ? q.trim() : null;
         Integer categoriaId = idCategoria;
         String categoriaNombre = categoriaId != null
@@ -145,7 +148,7 @@ public class UsuarioController {
         Page<ArtistaResumenDTO> page = pageUsuarios.map(usuario ->
                 convertirAArtistaResumenDTO(
                         usuario,
-                        usuarioId,
+                        usuarioConsulta,
                         categoriaPrincipalPorUsuario.get(usuario.getIdUsuario()),
                         miniObrasPorUsuario.getOrDefault(usuario.getIdUsuario(), List.of())
                 )
@@ -157,17 +160,28 @@ public class UsuarioController {
     @GetMapping("/{id}")
     public ResponseEntity<UsuarioDTO> obtenerPorId(@PathVariable Integer id,
                                                    @RequestParam(required = false) Long usuarioId) {
-        return usuarioRepository.findByIdConCategorias(id)
-                .map(u -> convertirADTO(u, usuarioId))
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Integer usuarioConsulta = SecurityUtils.obtenerIdUsuarioAutenticado();
+        Optional<Usuario> usuarioOpt = usuarioRepository.findByIdConCategorias(id);
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Usuario usuario = usuarioOpt.get();
+        if (usuarioConsulta.equals(usuario.getIdUsuario())) {
+            return ResponseEntity.ok(convertirADTOPrivado(usuario, usuarioConsulta.longValue()));
+        }
+        if (!esUsuarioVisiblePublicamente(usuario)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(convertirADTOPublico(usuario, usuarioConsulta.longValue()));
     }
 
     @GetMapping("/{id}/categoria")
     public ResponseEntity<UsuarioDTO> obtenerCategoriaUsuario(@PathVariable Integer id) {
+        Integer usuarioConsulta = SecurityUtils.validarAccesoUsuario(id);
         return usuarioRepository.findByIdConCategorias(id)
                 .map(u -> {
-                    UsuarioDTO dto = convertirADTO(u, null);
+                    UsuarioDTO dto = convertirADTOPrivado(u, usuarioConsulta.longValue());
                     dto.setContrasena(null);
                     return ResponseEntity.ok(dto);
                 })
@@ -188,7 +202,7 @@ public class UsuarioController {
 
         List<UsuarioDTO> creados = usuarios.stream()
                 .map(usuarioService::crearUsuarioConCategoria)
-                .map(u -> convertirADTO(u, null))
+                .map(u -> convertirADTOPrivado(u, null))
                 .peek(dto -> dto.setContrasena(null))
                 .collect(Collectors.toList());
 
@@ -198,7 +212,8 @@ public class UsuarioController {
     @PutMapping("/{id}")
     public ResponseEntity<UsuarioDTO> editarUsuario(@PathVariable Integer id, @RequestBody UsuarioDTO dto) {
         Usuario actualizado = usuarioService.actualizarUsuarioConCategoria(id, dto);
-        return ResponseEntity.ok(convertirADTO(actualizado, null));
+        Long usuarioConsulta = actualizado.getIdUsuario() != null ? actualizado.getIdUsuario().longValue() : null;
+        return ResponseEntity.ok(convertirADTOPrivado(actualizado, usuarioConsulta));
     }
 
     @DeleteMapping
@@ -238,7 +253,7 @@ public class UsuarioController {
         try {
             return usuarioService.actualizarRol(id, body.getRol(), adminId)
                     .map(usuario -> {
-                        UsuarioDTO dto = convertirADTO(usuario, null);
+                        UsuarioDTO dto = convertirADTOPrivado(usuario, null);
                         dto.setContrasena(null);
                         return ResponseEntity.ok(dto);
                     })
@@ -254,14 +269,12 @@ public class UsuarioController {
     @PutMapping("/{id}/foto-perfil")
     public ResponseEntity<UsuarioDTO> actualizarFotoPerfil(@PathVariable int id,
                                                            @Valid @RequestBody ActualizarFotoPerfilRequestDTO body) {
-        Optional<Usuario> op = usuarioRepository.findById(id);
-        if (op.isEmpty()) return ResponseEntity.notFound().build();
-
-        Usuario usuario = op.get();
-        usuario.setFotoPerfil(body.getFotoPerfil());
-
-        Usuario actualizado = usuarioRepository.save(usuario);
-        return ResponseEntity.ok(convertirADTO(actualizado, null));
+        return usuarioService.actualizarFotoPerfil(id, body.getFotoPerfil())
+                .map(usuario -> {
+                    Long usuarioConsulta = usuario.getIdUsuario() != null ? usuario.getIdUsuario().longValue() : null;
+                    return ResponseEntity.ok(convertirADTOPrivado(usuario, usuarioConsulta));
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/validar-password")
@@ -292,34 +305,54 @@ public class UsuarioController {
         return usuarioRepository.findByIdConCategorias(idUsuario)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
     }
-    private UsuarioDTO convertirADTO(Usuario u, Long usuarioIdConsulta) {
-        UsuarioDTO.UsuarioDTOBuilder builder = UsuarioDTO.builder()
-                .idUsuario(u.getIdUsuario())
-                .nombreCompleto(u.getNombreCompleto())
-                .usuario(u.getUsuario())
-                .contrasena(null)
+    private UsuarioDTO convertirADTOPrivado(Usuario u, Long usuarioIdConsulta) {
+        UsuarioDTO.UsuarioDTOBuilder builder = crearBuilderBaseUsuario(u, usuarioIdConsulta)
                 .correo(u.getCorreo())
-                .descripcion(u.getDescripcion())
-                .fotoPerfil(u.getFotoPerfil())
                 .telefono(u.getTelefono())
                 .redesSociales(u.getRedesSociales())
                 .ubicacion(u.getUbicacion())
                 .fechaNacimiento(u.getFechaNacimiento())
                 .rol(u.getRol())
-                .twoFactorEnabled(Boolean.TRUE.equals(u.getTwoFactorEnabled()))
+                .twoFactorEnabled(Boolean.TRUE.equals(u.getTwoFactorEnabled()));
+        completarCategoriaPrincipal(builder, u);
+        return builder.build();
+    }
+
+    private UsuarioDTO convertirADTOPublico(Usuario u, Long usuarioIdConsulta) {
+        UsuarioDTO.UsuarioDTOBuilder builder = crearBuilderBaseUsuario(u, usuarioIdConsulta);
+        completarCategoriaPrincipal(builder, u);
+        return builder.build();
+    }
+
+    private UsuarioDTO.UsuarioDTOBuilder crearBuilderBaseUsuario(Usuario u, Long usuarioIdConsulta) {
+        return UsuarioDTO.builder()
+                .idUsuario(u.getIdUsuario())
+                .nombreCompleto(u.getNombreCompleto())
+                .usuario(u.getUsuario())
+                .contrasena(null)
+                .correo(null)
+                .descripcion(u.getDescripcion())
+                .fotoPerfil(u.getFotoPerfil())
+                .telefono(null)
+                .redesSociales(null)
+                .ubicacion(null)
+                .fechaNacimiento(null)
+                .rol(null)
+                .twoFactorEnabled(null)
                 .likes(favoritosService.likesPorArtista(u.getIdUsuario().longValue()))
-                .esFavorito(false)
+                .esFavorito(esFavoritoParaUsuarioConsulta(usuarioIdConsulta, u.getIdUsuario()))
                 .idCategoria(null)
                 .categoria(null);
+    }
 
-        List<UsuarioIdCategoriaDTO> categorias = usuarioIdCategoriaService.obtenerTodasCategoriasPorUsuario(u.getIdUsuario());
-        if (!categorias.isEmpty()) {
-            UsuarioIdCategoriaDTO cat = categorias.get(0); // solo la primera
-            builder.idCategoria(cat.getIdCategoria());
-            builder.categoria(cat.getNombreCategoria());
+    private void completarCategoriaPrincipal(UsuarioDTO.UsuarioDTOBuilder builder, Usuario usuario) {
+        List<UsuarioIdCategoriaDTO> categorias = usuarioIdCategoriaService.obtenerTodasCategoriasPorUsuario(usuario.getIdUsuario());
+        if (categorias.isEmpty()) {
+            return;
         }
-        builder.esFavorito(esFavoritoParaUsuarioConsulta(usuarioIdConsulta, u.getIdUsuario()));
-        return builder.build();
+        UsuarioIdCategoriaDTO cat = categorias.get(0);
+        builder.idCategoria(cat.getIdCategoria());
+        builder.categoria(cat.getNombreCategoria());
     }
     private boolean esFavoritoParaUsuarioConsulta(Long usuarioIdConsulta, Integer idArtista) {
         if (usuarioIdConsulta == null || idArtista == null) {
@@ -356,7 +389,7 @@ public class UsuarioController {
                         : null)
                 .likes(likes)
                 .esFavorito(esFavorito)
-                .rol(usuario.getRol())
+                .rol(null)
                 .miniObras(miniObras)
                 .build();
     }
@@ -377,6 +410,12 @@ public class UsuarioController {
                 .twoFactorEnabled(Boolean.TRUE.equals(usuario.getTwoFactorEnabled()))
                 .contrasena(null)
                 .build();
+    }
+
+    private boolean esUsuarioVisiblePublicamente(Usuario usuario) {
+        return usuario != null
+                && usuario.getEstadoCuenta() != null
+                && !ESTADOS_NO_PUBLICOS.contains(usuario.getEstadoCuenta());
     }
 
     private Map<Integer, CategoriaUsuarios> obtenerCategoriaPrincipalPorUsuario(List<Usuario> usuarios) {
@@ -531,7 +570,7 @@ public class UsuarioController {
             return ResponseEntity.ok(response);
         }
 
-        UsuarioDTO dto = convertirADTO(usuarioAutenticado, null);
+        UsuarioDTO dto = convertirADTOPrivado(usuarioAutenticado, null);
         dto.setContrasena(null);
         String jwt = jwtService.generarToken(usuarioAutenticado);
 

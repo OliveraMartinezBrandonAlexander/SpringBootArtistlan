@@ -34,15 +34,34 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // Administracion
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admins/**").hasRole("ADMIN")
+                        .requestMatchers("/api/usuariosusuario/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/paginado").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/usuarios/*/rol").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/convocatorias").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/convocatorias/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/convocatorias/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/categorias").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/categorias").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/categorias/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/categorias").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/categorias/*").hasRole("ADMIN")
+                        .requestMatchers("/api/moderacion/**").hasAnyRole("ADMIN", "MODERADOR")
+                        .requestMatchers(HttpMethod.POST, "/api/carrito/reservas/expirar").hasRole("ADMIN")
+                        .requestMatchers("/api/categorias-obras/**").hasRole("ADMIN")
+                        .requestMatchers("/api/categoriaServicios/**").hasRole("ADMIN")
+                        .requestMatchers("/api/categorias-usuarios/**").hasRole("ADMIN")
+                        .requestMatchers("/api/usuarioIdCategoria/**").hasRole("ADMIN")
+
                         // Publicos
+                        .requestMatchers("/error", "/paypal/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/chatbot/message").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/existe").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/*/categoria").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/2fa/verify-login", "/auth/2fa/verify-login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/2fa/resend", "/auth/2fa/resend").permitAll()
                         .requestMatchers(
@@ -54,13 +73,26 @@ public class SecurityConfig {
                                 "/auth/password-reset/confirm",
                                 "/auth/password-reset/resend"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/artistas/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/obras/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/servicios/**").permitAll()
-                        .requestMatchers("/error").permitAll()
-
-                        // Privados en fase 2A
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/usuarios",
+                                "/api/usuarios/*",
+                                "/api/usuarios/*/categoria",
+                                "/api/usuarios/artistas/paginado",
+                                "/api/artistas/**")
+                        .authenticated()
+                        // Autenticados
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/obras/**",
+                                "/api/obrasLikes/**",
+                                "/api/obrasDeUsuario/*",
+                                "/api/portafolioPersonal/*",
+                                "/api/servicios/**",
+                                "/api/convocatorias/**",
+                                "/api/categorias/**",
+                                "/api/favoritos/likes/**")
+                        .authenticated()
                         .requestMatchers(HttpMethod.POST,
+                                "/api/chatbot/message",
                                 "/api/auth/2fa/request-activation",
                                 "/auth/2fa/request-activation",
                                 "/api/auth/2fa/verify-activation",
@@ -69,11 +101,7 @@ public class SecurityConfig {
                                 "/auth/2fa/disable",
                                 "/api/usuarios/validar-password")
                         .authenticated()
-                        .requestMatchers("/api/moderacion/**").hasAnyRole("ADMIN", "MODERADOR")
-                        .requestMatchers(HttpMethod.PUT, "/api/usuarios/*/rol").hasRole("ADMIN")
-
-                        // Gradual: no bloquear otros modulos aun
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) ->

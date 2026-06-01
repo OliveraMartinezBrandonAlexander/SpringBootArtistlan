@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.publico.PerfilPublicoArtistaDTO;
 import com.example.demo.service.PerfilPublicoService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ public class PerfilPublicoController {
             @PathVariable Integer idArtista,
             @RequestParam(name = "usuarioConsulta", required = false) Integer usuarioConsulta,
             @RequestParam(name = "idUsuarioConsulta", required = false) Integer idUsuarioConsulta) {
-        Integer consulta = usuarioConsulta != null ? usuarioConsulta : idUsuarioConsulta;
+        Integer consulta = SecurityUtils.obtenerIdUsuarioAutenticado();
         return ResponseEntity.ok(perfilPublicoService.obtenerPerfilPublico(idArtista, consulta));
     }
 }

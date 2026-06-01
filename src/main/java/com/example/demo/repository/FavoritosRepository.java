@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.example.demo.enums.EstadoModeracion;
+
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,4 +48,42 @@ public interface FavoritosRepository extends JpaRepository<Favoritos, Integer> {
 
     @Modifying
     void deleteByServicioIdServicio(Integer idServicio);
+
+    @Query("""
+            SELECT COUNT(f)
+            FROM Favoritos f
+            WHERE f.artista.idUsuario = :idUsuario
+              AND f.fecha BETWEEN :inicio AND :fin
+            """)
+    long countFavoritosDirectosRecibidosEnPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                  @Param("inicio") LocalDateTime inicio,
+                                                  @Param("fin") LocalDateTime fin);
+
+    @Query("""
+            SELECT COUNT(f)
+            FROM Favoritos f
+            JOIN f.obra o
+            WHERE o.usuario.idUsuario = :idUsuario
+              AND f.fecha BETWEEN :inicio AND :fin
+              AND COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosExcluidos
+            """)
+    long countFavoritosObrasVisiblesRecibidosEnPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                       @Param("inicio") LocalDateTime inicio,
+                                                       @Param("fin") LocalDateTime fin,
+                                                       @Param("estadosExcluidos") List<EstadoModeracion> estadosExcluidos);
+
+    @Query("""
+            SELECT COUNT(f)
+            FROM Favoritos f
+            JOIN f.servicio s
+            WHERE s.usuario.idUsuario = :idUsuario
+              AND f.fecha BETWEEN :inicio AND :fin
+              AND COALESCE(s.oculto, false) = false
+              AND s.estadoModeracion NOT IN :estadosExcluidos
+            """)
+    long countFavoritosServiciosVisiblesRecibidosEnPeriodo(@Param("idUsuario") Integer idUsuario,
+                                                           @Param("inicio") LocalDateTime inicio,
+                                                           @Param("fin") LocalDateTime fin,
+                                                           @Param("estadosExcluidos") List<EstadoModeracion> estadosExcluidos);
 }

@@ -1,8 +1,10 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ServicioDTO;
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
+import com.example.demo.enums.TipoMetaPersonal;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.model.Categoria;
 import com.example.demo.model.CategoriaServicios;
@@ -14,6 +16,7 @@ import com.example.demo.repository.CategoriaServiciosRepository;
 import com.example.demo.repository.FavoritosRepository;
 import com.example.demo.repository.ServicioRepository;
 import com.example.demo.repository.UsuarioRepository;
+import com.example.demo.service.MetaPersonalService;
 import com.example.demo.service.ServicioService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -59,9 +63,18 @@ public class ServicioServiceImpl implements ServicioService {
     private final CategoriaRepository categoriaRepository;
     private final CategoriaServiciosRepository categoriaServiciosRepository;
     private final FavoritosRepository favoritosRepository;
+    private final MetaPersonalService metaPersonalService;
 
     @Override
     public Servicio guardarServicio(Servicio s) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        Integer idUsuarioSolicitado = s != null && s.getUsuario() != null ? s.getUsuario().getIdUsuario() : null;
+        if (idUsuarioSolicitado != null && !idUsuarioSolicitado.equals(idUsuarioAutenticado)) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes publicar un servicio para otro usuario.");
+        }
+        Usuario usuarioAutenticado = usuarioRepository.findById(idUsuarioAutenticado)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + idUsuarioAutenticado));
+        s.setUsuario(usuarioAutenticado);
         return repo.save(s);
     }
 
@@ -156,15 +169,16 @@ public class ServicioServiceImpl implements ServicioService {
 
     @Override
     @Transactional
-    public Optional<Servicio> actualizarServicio(Integer id, Servicio servicioActualizado) {
-        return repo.findById(id).map(existente -> {
+    public Optional<Servicio> actualizarServicio(Integer id, ServicioDTO servicioActualizado) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        return repo.findByIdConCategoria(id).map(existente -> {
+            validarNoOcultoOEliminado(existente, id);
+            validarPertenencia(existente, idUsuarioAutenticado);
             validarNoRetiradoPorModeracionParaEditar(existente);
-            existente.setTitulo(servicioActualizado.getTitulo());
-            existente.setDescripcion(servicioActualizado.getDescripcion());
-            existente.setTipoContacto(servicioActualizado.getTipoContacto());
-            existente.setContacto(servicioActualizado.getContacto());
-            existente.setTecnicas(servicioActualizado.getTecnicas());
-            validarContacto(existente.getTipoContacto(), existente.getContacto());
+            if (servicioActualizado.getIdUsuario() != null && !idUsuarioAutenticado.equals(servicioActualizado.getIdUsuario())) {
+                throw new ResponseStatusException(FORBIDDEN, "No puedes editar un servicio de otro usuario.");
+            }
+            aplicarActualizacionServicio(existente, servicioActualizado);
             return repo.save(existente);
         });
     }
@@ -172,6 +186,7 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional
     public boolean eliminarServicio(Integer id) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
         Servicio servicio = repo.findById(id).orElse(null);
         if (servicio == null) {
             return false;
@@ -181,6 +196,7 @@ public class ServicioServiceImpl implements ServicioService {
             return false;
         }
 
+        validarPertenencia(servicio, idUsuarioAutenticado);
         validarNoRetiradoPorModeracionParaEliminar(servicio);
         ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
         return true;
@@ -188,11 +204,12 @@ public class ServicioServiceImpl implements ServicioService {
 
     @Override
     public List<Servicio> buscarPorUsuarioId(Integer usuarioId) {
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
         List<Servicio> servicios = repo.findPropiosActivosByUsuarioId(
-                usuarioId,
+                idUsuarioAutenticado,
                 ESTADOS_NO_VISIBLES_PUBLICO
         );
-        log.info("PortafolioBackendDebug listado servicios propios usuarioId={} totalActivos={}", usuarioId, servicios.size());
+        log.info("PortafolioBackendDebug listado servicios propios usuarioId={} totalActivos={}", idUsuarioAutenticado, servicios.size());
         return servicios;
     }
 
@@ -208,17 +225,112 @@ public class ServicioServiceImpl implements ServicioService {
     @Override
     @Transactional
     public Servicio actualizarServicioDeUsuario(Integer usuarioId, Integer idServicio, ServicioDTO dto) {
-        log.info("ServicioCrudBackendDebug UPDATE recibido usuarioId={} idServicio={}", usuarioId, idServicio);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
+        log.info("ServicioCrudBackendDebug UPDATE recibido usuarioId={} idServicio={}", idUsuarioAutenticado, idServicio);
         Servicio existente = repo.findByIdConCategoria(idServicio)
                 .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
 
         log.info("ServicioCrudBackendDebug UPDATE existe=true idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
-                idServicio, obtenerPropietarioId(existente), usuarioId, existente.getOculto(), existente.getEstadoModeracion());
+                idServicio, obtenerPropietarioId(existente), idUsuarioAutenticado, existente.getOculto(), existente.getEstadoModeracion());
         validarNoOcultoOEliminado(existente, idServicio);
-        validarPertenencia(existente, usuarioId);
-        log.info("ServicioCrudBackendDebug UPDATE validacion propietario OK idServicio={} usuarioId={}", idServicio, usuarioId);
+        validarPertenencia(existente, idUsuarioAutenticado);
+        log.info("ServicioCrudBackendDebug UPDATE validacion propietario OK idServicio={} usuarioId={}", idServicio, idUsuarioAutenticado);
         validarNoRetiradoPorModeracionParaEditar(existente);
+        aplicarActualizacionServicio(existente, dto);
 
+        Servicio guardado = repo.save(existente);
+        log.info("ServicioCrudBackendDebug UPDATE guardado idServicio={} usuarioId={}", guardado.getIdServicio(), idUsuarioAutenticado);
+        return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
+    }
+
+    @Override
+    @Transactional
+    public void eliminarServicioDeUsuario(Integer usuarioId, Integer idServicio) {
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
+        log.info("ServicioCrudBackendDebug DELETE recibido usuarioId={} idServicio={}", idUsuarioAutenticado, idServicio);
+        Servicio servicio = repo.findById(idServicio)
+                .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
+
+        log.info("ServicioCrudBackendDebug DELETE existe=true idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
+                idServicio, obtenerPropietarioId(servicio), idUsuarioAutenticado, servicio.getOculto(), servicio.getEstadoModeracion());
+        validarNoOcultoOEliminado(servicio, idServicio);
+        validarPertenencia(servicio, idUsuarioAutenticado);
+        log.info("ServicioCrudBackendDebug DELETE validacion propietario OK idServicio={} usuarioId={}", idServicio, idUsuarioAutenticado);
+        validarNoRetiradoPorModeracionParaEliminar(servicio);
+        ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
+        int activosDespues = repo.findPropiosActivosByUsuarioId(idUsuarioAutenticado, ESTADOS_NO_VISIBLES_PUBLICO).size();
+        log.info("ServicioCrudBackendDebug DELETE soft delete OK idServicio={} usuarioId={} serviciosActivosDespues={}",
+                idServicio, idUsuarioAutenticado, activosDespues);
+    }
+
+    @Override
+    @Transactional
+    public Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto) {
+        Integer idUsuarioAutenticado = usuarioId != null
+                ? SecurityUtils.validarAccesoUsuario(usuarioId)
+                : SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (dto.getIdUsuario() != null && !idUsuarioAutenticado.equals(dto.getIdUsuario())) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes publicar un servicio para otro usuario.");
+        }
+        Usuario usuario = usuarioRepository.findById(idUsuarioAutenticado)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + idUsuarioAutenticado));
+
+        validarContacto(dto.getTipoContacto(), dto.getContacto());
+        validarRangoPrecios(dto.getPrecioMin(), dto.getPrecioMax());
+
+        Servicio servicio = new Servicio();
+        servicio.setTitulo(dto.getTitulo());
+        servicio.setDescripcion(dto.getDescripcion());
+        servicio.setTipoContacto(dto.getTipoContacto());
+        servicio.setContacto(dto.getContacto());
+        servicio.setTecnicas(dto.getTecnicas());
+        servicio.setPrecioMin(dto.getPrecioMin());
+        servicio.setPrecioMax(dto.getPrecioMax());
+        servicio.setUsuario(usuario);
+        servicio.setFechaPublicacion(LocalDateTime.now());
+
+        Servicio guardado = repo.save(servicio);
+        reemplazarCategoria(guardado, dto.getIdCategoria());
+        metaPersonalService.evaluarMetasDelUsuarioPorTipos(idUsuarioAutenticado, EnumSet.of(TipoMetaPersonal.PUBLICACIONES));
+
+        return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
+    }
+
+    private void reemplazarCategoria(Servicio servicio, Integer idCategoria) {
+        if (idCategoria == null) {
+            return;
+        }
+
+        Integer categoriaActual = servicio.getCategoriasServicios().stream()
+                .map(CategoriaServicios::getCategoria)
+                .filter(java.util.Objects::nonNull)
+                .map(Categoria::getIdCategoria)
+                .findFirst()
+                .orElse(null);
+        if (java.util.Objects.equals(categoriaActual, idCategoria)) {
+            return;
+        }
+
+        servicio.getCategoriasServicios().clear();
+
+        if (idCategoria <= 0) {
+            return;
+        }
+        validarCategoriaServicio(idCategoria);
+
+        Categoria categoria = categoriaRepository.findById(idCategoria)
+                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con ID: " + idCategoria));
+
+        CategoriaServicios categoriaServicio = new CategoriaServicios(
+                new CategoriaServiciosID(servicio.getIdServicio(), categoria.getIdCategoria()),
+                servicio,
+                categoria
+        );
+
+        servicio.getCategoriasServicios().add(categoriaServicio);
+    }
+
+    private void aplicarActualizacionServicio(Servicio existente, ServicioDTO dto) {
         if (dto.getTitulo() != null) {
             existente.setTitulo(dto.getTitulo());
         }
@@ -246,80 +358,6 @@ public class ServicioServiceImpl implements ServicioService {
         if (dto.getIdCategoria() != null && dto.getIdCategoria() > 0) {
             reemplazarCategoria(existente, dto.getIdCategoria());
         }
-
-        Servicio guardado = repo.save(existente);
-        log.info("ServicioCrudBackendDebug UPDATE guardado idServicio={} usuarioId={}", guardado.getIdServicio(), usuarioId);
-        return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
-    }
-
-    @Override
-    @Transactional
-    public void eliminarServicioDeUsuario(Integer usuarioId, Integer idServicio) {
-        log.info("ServicioCrudBackendDebug DELETE recibido usuarioId={} idServicio={}", usuarioId, idServicio);
-        Servicio servicio = repo.findById(idServicio)
-                .orElseThrow(() -> new NoSuchElementException("Servicio no encontrado con ID: " + idServicio));
-
-        log.info("ServicioCrudBackendDebug DELETE existe=true idServicio={} propietario={} usuarioId={} oculto={} estadoModeracion={}",
-                idServicio, obtenerPropietarioId(servicio), usuarioId, servicio.getOculto(), servicio.getEstadoModeracion());
-        validarNoOcultoOEliminado(servicio, idServicio);
-        validarPertenencia(servicio, usuarioId);
-        log.info("ServicioCrudBackendDebug DELETE validacion propietario OK idServicio={} usuarioId={}", idServicio, usuarioId);
-        validarNoRetiradoPorModeracionParaEliminar(servicio);
-        ocultarServicioLogicamente(servicio, "Servicio eliminado por el usuario");
-        int activosDespues = repo.findPropiosActivosByUsuarioId(usuarioId, ESTADOS_NO_VISIBLES_PUBLICO).size();
-        log.info("ServicioCrudBackendDebug DELETE soft delete OK idServicio={} usuarioId={} serviciosActivosDespues={}",
-                idServicio, usuarioId, activosDespues);
-    }
-
-    @Override
-    @Transactional
-    public Servicio crearServicioParaUsuario(Integer usuarioId, ServicioDTO dto) {
-        Usuario usuario = usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
-
-        validarContacto(dto.getTipoContacto(), dto.getContacto());
-        validarRangoPrecios(dto.getPrecioMin(), dto.getPrecioMax());
-
-        Servicio servicio = new Servicio();
-        servicio.setTitulo(dto.getTitulo());
-        servicio.setDescripcion(dto.getDescripcion());
-        servicio.setTipoContacto(dto.getTipoContacto());
-        servicio.setContacto(dto.getContacto());
-        servicio.setTecnicas(dto.getTecnicas());
-        servicio.setPrecioMin(dto.getPrecioMin());
-        servicio.setPrecioMax(dto.getPrecioMax());
-        servicio.setUsuario(usuario);
-        servicio.setFechaPublicacion(LocalDateTime.now());
-
-        Servicio guardado = repo.save(servicio);
-        reemplazarCategoria(guardado, dto.getIdCategoria());
-
-        return repo.findByIdConCategoria(guardado.getIdServicio()).orElse(guardado);
-    }
-
-    private void reemplazarCategoria(Servicio servicio, Integer idCategoria) {
-        if (idCategoria == null) {
-            return;
-        }
-
-        categoriaServiciosRepository.deleteByServicioIdServicio(servicio.getIdServicio());
-        servicio.getCategoriasServicios().clear();
-
-        if (idCategoria <= 0) {
-            return;
-        }
-        validarCategoriaServicio(idCategoria);
-
-        Categoria categoria = categoriaRepository.findById(idCategoria)
-                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con ID: " + idCategoria));
-
-        CategoriaServicios categoriaServicio = new CategoriaServicios(
-                new CategoriaServiciosID(servicio.getIdServicio(), categoria.getIdCategoria()),
-                servicio,
-                categoria
-        );
-
-        servicio.getCategoriasServicios().add(categoriaServicio);
     }
 
     private void validarPertenencia(Servicio servicio, Integer usuarioId) {

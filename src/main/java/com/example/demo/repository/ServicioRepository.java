@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -165,4 +166,14 @@ public interface ServicioRepository extends JpaRepository<Servicio, Integer> {
 
     List<Servicio> findByUsuario_IdUsuarioAndOcultoFalseAndEstadoModeracionNotIn(Integer idUsuario,
                                                                                   List<EstadoModeracion> estadosModeracion);
+
+    @Query("""
+            SELECT COUNT(s)
+            FROM Servicio s
+            WHERE s.usuario.idUsuario = :idUsuario
+              AND s.fechaPublicacion BETWEEN :inicio AND :fin
+            """)
+    long countPublicadosByUsuarioYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                          @Param("inicio") LocalDateTime inicio,
+                                          @Param("fin") LocalDateTime fin);
 }

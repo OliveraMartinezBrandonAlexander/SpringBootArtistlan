@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
+import com.example.demo.model.Favoritos;
 import com.example.demo.model.Obra;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -175,6 +177,83 @@ public interface ObraRepository extends JpaRepository<Obra, Integer> {
             """)
     List<Obra> findPublicasVisiblesPorUsuarioIds(
             @Param("usuarioIds") List<Integer> usuarioIds,
+            @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+            @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta
+    );
+
+    @Query("""
+            SELECT COUNT(o)
+            FROM Obra o
+            WHERE o.usuario.idUsuario = :idUsuario
+              AND o.fechaPublicacion BETWEEN :inicio AND :fin
+            """)
+    long countPublicadasByUsuarioYPeriodo(@Param("idUsuario") Integer idUsuario,
+                                          @Param("inicio") LocalDateTime inicio,
+                                          @Param("fin") LocalDateTime fin);
+
+    @Query("""
+            SELECT o.idObra
+            FROM Obra o
+            JOIN o.usuario u
+            LEFT JOIN Favoritos f ON f.obra = o
+            WHERE COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+            GROUP BY o.idObra, o.fechaPublicacion
+            HAVING COUNT(f.idFavorito) > 0
+            ORDER BY COUNT(f.idFavorito) DESC, o.fechaPublicacion DESC, o.idObra DESC
+            """)
+    List<Integer> findIdsObrasPopularesVisibles(
+            @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+            @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT o.idObra
+            FROM Obra o
+            JOIN o.usuario u
+            WHERE COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+            ORDER BY o.fechaPublicacion DESC, o.idObra DESC
+            """)
+    List<Integer> findIdsObrasRecientesVisibles(
+            @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+            @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT o.idObra
+            FROM Obra o
+            JOIN o.usuario u
+            WHERE COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+              AND o.idObra NOT IN :idsExcluidos
+            ORDER BY o.fechaPublicacion DESC, o.idObra DESC
+            """)
+    List<Integer> findIdsObrasRecientesVisiblesExcluyendo(
+            @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
+            @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta,
+            @Param("idsExcluidos") List<Integer> idsExcluidos,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT DISTINCT o
+            FROM Obra o
+            JOIN FETCH o.usuario u
+            LEFT JOIN FETCH o.categoriaObras co
+            LEFT JOIN FETCH co.categoria
+            WHERE o.idObra IN :ids
+              AND COALESCE(o.oculta, false) = false
+              AND o.estadoModeracion NOT IN :estadosModeracion
+              AND u.estadoCuenta NOT IN :estadosCuenta
+            """)
+    List<Obra> findPublicasVisiblesByIds(
+            @Param("ids") List<Integer> ids,
             @Param("estadosModeracion") List<EstadoModeracion> estadosModeracion,
             @Param("estadosCuenta") List<EstadoCuenta> estadosCuenta
     );

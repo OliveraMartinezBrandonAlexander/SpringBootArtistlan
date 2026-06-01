@@ -7,6 +7,10 @@ import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
+import static org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED;
+
 @RestController
 @RequestMapping("/api/usuariosusuario")
 @AllArgsConstructor
@@ -26,32 +30,23 @@ public class UsuariosUsuarioController {
 
     // POST individual (crear)
     @PostMapping
-    public ResponseEntity<UsuarioDTO> crearUsuario(@RequestBody Usuario usuario) {
-        Usuario creado = usuarioService.guardarUsuario(usuario);
-        return ResponseEntity.ok(convertirADTO(creado));
+    public ResponseEntity<Map<String, String>> crearUsuario() {
+        return ResponseEntity.status(METHOD_NOT_ALLOWED)
+                .body(Map.of("message", "Operacion no disponible en el modulo legacy de usuarios."));
     }
 
     // PUT individual (actualizar)
     @PutMapping("/{id}")
-    public ResponseEntity<UsuarioDTO> actualizarUsuario(@PathVariable Integer id, @RequestBody Usuario datos) {
-
-        Usuario actualizado = usuarioService.actualizarUsuario(id, datos)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        return ResponseEntity.ok(convertirADTO(actualizado));
+    public ResponseEntity<Map<String, String>> actualizarUsuario(@PathVariable Integer id) {
+        return ResponseEntity.status(METHOD_NOT_ALLOWED)
+                .body(Map.of("message", "Operacion no disponible en el modulo legacy de usuarios."));
     }
 
     // DELETE individual
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarUsuario(@PathVariable Integer id) {
-
-        boolean eliminado = usuarioService.eliminarUsuario(id);
-
-        if (!eliminado) {
-            return ResponseEntity.notFound().build();
-        }
-
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Map<String, String>> eliminarUsuario(@PathVariable Integer id) {
+        return ResponseEntity.status(METHOD_NOT_ALLOWED)
+                .body(Map.of("message", "Operacion no disponible en el modulo legacy de usuarios."));
     }
 
     private UsuarioDTO convertirADTO(Usuario u) {

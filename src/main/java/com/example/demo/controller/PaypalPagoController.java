@@ -21,7 +21,7 @@ public class PaypalPagoController {
 
     @PostMapping("/crear-orden/{idObra}")
     public ResponseEntity<CrearOrdenPaypalResponseDTO> crearOrden(@PathVariable Integer idObra,
-                                                                  @RequestParam Integer compradorId) {
+                                                                  @RequestParam(required = false) Integer compradorId) {
         CrearOrdenPaypalResponseDTO response = paypalPagoService.crearOrdenParaObra(idObra, compradorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

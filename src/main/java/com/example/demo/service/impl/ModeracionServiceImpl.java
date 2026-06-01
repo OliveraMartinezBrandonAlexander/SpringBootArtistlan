@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.moderacion.ReporteDetalleDTO;
 import com.example.demo.dto.moderacion.ReporteResumenDTO;
 import com.example.demo.dto.moderacion.ResolverReporteRequestDTO;
@@ -74,7 +75,7 @@ public class ModeracionServiceImpl implements ModeracionService {
                                                   PrioridadReporte prioridad,
                                                   TipoObjetivoReporte tipoObjetivo,
                                                   Boolean soloMios) {
-        Usuario moderador = validarModeradorActivo(idModeradorSolicitante);
+        Usuario moderador = obtenerModeradorAutenticadoValidandoActor(idModeradorSolicitante);
 
         List<Reporte> reportes;
         if (Boolean.TRUE.equals(soloMios)) {
@@ -104,7 +105,7 @@ public class ModeracionServiceImpl implements ModeracionService {
     @Override
     @Transactional(readOnly = true)
     public ReporteDetalleDTO obtenerDetalleReporte(Integer idModeradorSolicitante, Integer idReporte) {
-        validarModeradorActivo(idModeradorSolicitante);
+        obtenerModeradorAutenticadoValidandoActor(idModeradorSolicitante);
 
         if (idReporte == null) {
             throw new ResponseStatusException(BAD_REQUEST, "idReporte es obligatorio");
@@ -119,17 +120,12 @@ public class ModeracionServiceImpl implements ModeracionService {
     @Override
     @Transactional
     public RespuestaModeracionDTO tomarReporte(Integer idReporte, TomarReporteRequestDTO request) {
-        if (request == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "El request para tomar reporte es obligatorio");
-        }
-        if (request.getIdModerador() == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "idModerador es obligatorio");
-        }
         if (idReporte == null) {
             throw new ResponseStatusException(BAD_REQUEST, "idReporte es obligatorio");
         }
 
-        Usuario moderador = validarModeradorActivo(request.getIdModerador());
+        TomarReporteRequestDTO requestSeguro = request != null ? request : new TomarReporteRequestDTO();
+        Usuario moderador = obtenerModeradorAutenticadoValidandoActor(requestSeguro.getIdModerador());
         Reporte reporte = reporteRepository.findById(idReporte)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado"));
 
@@ -146,8 +142,8 @@ public class ModeracionServiceImpl implements ModeracionService {
         reporte.setEstado(EstadoReporte.EN_REVISION);
         reporte.setFechaInicioRevision(LocalDateTime.now());
 
-        if (request.getPrioridad() != null) {
-            reporte.setPrioridad(request.getPrioridad());
+        if (requestSeguro.getPrioridad() != null) {
+            reporte.setPrioridad(requestSeguro.getPrioridad());
         }
 
         Reporte guardado = reporteRepository.save(reporte);
@@ -175,9 +171,6 @@ public class ModeracionServiceImpl implements ModeracionService {
         if (idReporte == null) {
             throw new ResponseStatusException(BAD_REQUEST, "idReporte es obligatorio");
         }
-        if (request.getIdModerador() == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "idModerador es obligatorio");
-        }
         if (request.getAccion() == null) {
             throw new ResponseStatusException(BAD_REQUEST, "accion es obligatoria");
         }
@@ -196,7 +189,7 @@ public class ModeracionServiceImpl implements ModeracionService {
                 ? normalizarTextoObligatorio(request.getMotivoAccion(), "motivoAccion es obligatorio para esta accion")
                 : normalizarTextoOpcional(request.getMotivoAccion());
 
-        Usuario moderador = validarModeradorActivo(request.getIdModerador());
+        Usuario moderador = obtenerModeradorAutenticadoValidandoActor(request.getIdModerador());
         Reporte reporte = reporteRepository.findById(idReporte)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado"));
 
@@ -245,12 +238,13 @@ public class ModeracionServiceImpl implements ModeracionService {
                 .build();
     }
 
-    private Usuario validarModeradorActivo(Integer idModerador) {
-        if (idModerador == null) {
-            throw new ResponseStatusException(BAD_REQUEST, "idModeradorSolicitante es obligatorio");
+    private Usuario obtenerModeradorAutenticadoValidandoActor(Integer idModeradorSolicitado) {
+        Integer idModeradorAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (idModeradorSolicitado != null && !idModeradorSolicitado.equals(idModeradorAutenticado)) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes actuar como otro moderador.");
         }
 
-        Usuario usuario = usuarioRepository.findById(idModerador)
+        Usuario usuario = usuarioRepository.findById(idModeradorAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario moderador no encontrado"));
 
         if (!esRolModeracion(usuario)) {

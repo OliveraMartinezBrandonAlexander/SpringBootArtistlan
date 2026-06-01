@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.moderacion.CrearReporteRequestDTO;
 import com.example.demo.dto.moderacion.ReporteDetalleDTO;
 import com.example.demo.dto.moderacion.ReporteResumenDTO;
@@ -59,8 +60,12 @@ public class ReporteServiceImpl implements ReporteService {
     @Transactional
     public ReporteDetalleDTO crearReporte(CrearReporteRequestDTO request) {
         validarRequestBase(request);
+        Integer idReportanteAutenticado = validarActorAutenticado(
+                request.getIdUsuarioReportante(),
+                "No puedes crear reportes como otro usuario"
+        );
 
-        Usuario reportante = usuarioRepository.findById(request.getIdUsuarioReportante())
+        Usuario reportante = usuarioRepository.findById(idReportanteAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario reportante no encontrado"));
 
         validarUsuarioReportanteActivo(reportante);
@@ -88,8 +93,9 @@ public class ReporteServiceImpl implements ReporteService {
     @Override
     @Transactional(readOnly = true)
     public List<ReporteResumenDTO> listarReportesDeUsuario(Integer idUsuario) {
-        validarUsuarioExiste(idUsuario);
-        return reporteRepository.findByUsuarioReportante_IdUsuarioOrderByFechaReporteDesc(idUsuario)
+        Integer idUsuarioAutenticado = validarActorAutenticado(idUsuario, "No puedes consultar reportes de otro usuario");
+        validarUsuarioExiste(idUsuarioAutenticado);
+        return reporteRepository.findByUsuarioReportante_IdUsuarioOrderByFechaReporteDesc(idUsuarioAutenticado)
                 .stream()
                 .map(this::toResumenDto)
                 .toList();
@@ -98,14 +104,15 @@ public class ReporteServiceImpl implements ReporteService {
     @Override
     @Transactional(readOnly = true)
     public ReporteDetalleDTO obtenerDetalleReporteDeUsuario(Integer idUsuario, Integer idReporte) {
-        validarUsuarioExiste(idUsuario);
+        Integer idUsuarioAutenticado = validarActorAutenticado(idUsuario, "No puedes consultar reportes de otro usuario");
+        validarUsuarioExiste(idUsuarioAutenticado);
 
         Reporte reporte = reporteRepository.findById(idReporte)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado"));
 
         if (reporte.getUsuarioReportante() == null
                 || reporte.getUsuarioReportante().getIdUsuario() == null
-                || !idUsuario.equals(reporte.getUsuarioReportante().getIdUsuario())) {
+                || !idUsuarioAutenticado.equals(reporte.getUsuarioReportante().getIdUsuario())) {
             throw new ResponseStatusException(FORBIDDEN, "No puedes consultar este reporte");
         }
 
@@ -266,6 +273,18 @@ public class ReporteServiceImpl implements ReporteService {
         if (!usuarioRepository.existsById(idUsuario)) {
             throw new ResourceNotFoundException("Usuario no encontrado");
         }
+    }
+
+    private Integer validarActorAutenticado(Integer idUsuarioRecibido, String mensajeForbidden) {
+        if (idUsuarioRecibido == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "idUsuario es obligatorio");
+        }
+
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        if (!idUsuarioAutenticado.equals(idUsuarioRecibido)) {
+            throw new ResponseStatusException(FORBIDDEN, mensajeForbidden);
+        }
+        return idUsuarioAutenticado;
     }
 
     private ReporteResumenDTO toResumenDto(Reporte reporte) {

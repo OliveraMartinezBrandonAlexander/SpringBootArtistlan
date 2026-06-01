@@ -1,17 +1,21 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.enums.EstadoModeracion;
+import com.example.demo.enums.TipoMetaPersonal;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
+import com.example.demo.service.MetaPersonalService;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +23,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.text.Normalizer;
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
@@ -38,6 +47,8 @@ public class ObraServiceImpl implements ObraService {
     private static final String ESTADO_RESERVADA = "RESERVADA";
     private static final String ESTADO_VENDIDA = "VENDIDA";
     private static final String ESTADO_TRANSACCION_COMPLETADA = "CAPTURADA";
+    private static final int LIMIT_POPULARES_DEFAULT = 10;
+    private static final int LIMIT_POPULARES_MAX = 20;
     private static final int CATEGORIA_OBRA_MIN = 1;
     private static final int CATEGORIA_OBRA_MAX = 18;
     private static final List<EstadoModeracion> ESTADOS_NO_VISIBLES_PUBLICO = List.of(
@@ -58,10 +69,24 @@ public class ObraServiceImpl implements ObraService {
     private final CompraObraRepository compraObraRepository;
     private final CompraCarritoDetalleRepository compraCarritoDetalleRepository;
     private final SolicitudCompraObraRepository solicitudRepository;
+    private final MetaPersonalService metaPersonalService;
     private final NotificacionService notificacionService;
 
     @Override
     public Obra guardar(Obra o) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        Integer idUsuarioSolicitado = o != null && o.getUsuario() != null ? o.getUsuario().getIdUsuario() : null;
+        if (idUsuarioSolicitado != null && !idUsuarioSolicitado.equals(idUsuarioAutenticado)) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes publicar una obra para otro usuario.");
+        }
+        Usuario usuarioAutenticado = usuarioRepository.findById(idUsuarioAutenticado)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + idUsuarioAutenticado));
+        o.setUsuario(usuarioAutenticado);
+        if (o.getEstado() == null || o.getEstado().isBlank()) {
+            o.setEstado(ESTADO_EN_VENTA);
+        } else {
+            o.setEstado(normalizarEstado(o.getEstado()));
+        }
         return obraRepository.save(o);
     }
 
@@ -77,6 +102,62 @@ public class ObraServiceImpl implements ObraService {
                 ESTADOS_NO_VISIBLES_PUBLICO,
                 ESTADOS_DUENO_NO_VISIBLES_PUBLICO
         );
+        inicializarRelacionesPublicas(obras);
+        return obras;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Obra> obtenerObrasPopularesParaCarrusel(Integer limit) {
+        int limiteFinal = normalizarLimitePopulares(limit);
+        Pageable pageable = PageRequest.of(0, limiteFinal);
+
+        LinkedHashSet<Integer> idsSeleccionados = new LinkedHashSet<>(
+                obraRepository.findIdsObrasPopularesVisibles(
+                        ESTADOS_NO_VISIBLES_PUBLICO,
+                        ESTADOS_DUENO_NO_VISIBLES_PUBLICO,
+                        pageable
+                )
+        );
+
+        int restantes = limiteFinal - idsSeleccionados.size();
+        if (restantes > 0) {
+            Pageable recentPageable = PageRequest.of(0, restantes);
+            List<Integer> idsRecientes = idsSeleccionados.isEmpty()
+                    ? obraRepository.findIdsObrasRecientesVisibles(
+                    ESTADOS_NO_VISIBLES_PUBLICO,
+                    ESTADOS_DUENO_NO_VISIBLES_PUBLICO,
+                    recentPageable
+            )
+                    : obraRepository.findIdsObrasRecientesVisiblesExcluyendo(
+                    ESTADOS_NO_VISIBLES_PUBLICO,
+                    ESTADOS_DUENO_NO_VISIBLES_PUBLICO,
+                    List.copyOf(idsSeleccionados),
+                    recentPageable
+            );
+            idsSeleccionados.addAll(idsRecientes);
+        }
+
+        if (idsSeleccionados.isEmpty()) {
+            return List.of();
+        }
+
+        List<Integer> idsOrdenados = idsSeleccionados.stream()
+                .limit(limiteFinal)
+                .toList();
+
+        Map<Integer, Obra> obrasPorId = obraRepository.findPublicasVisiblesByIds(
+                        idsOrdenados,
+                        ESTADOS_NO_VISIBLES_PUBLICO,
+                        ESTADOS_DUENO_NO_VISIBLES_PUBLICO
+                ).stream()
+                .collect(Collectors.toMap(Obra::getIdObra, Function.identity(), (first, second) -> first));
+
+        List<Obra> obras = idsOrdenados.stream()
+                .map(obrasPorId::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
         inicializarRelacionesPublicas(obras);
         return obras;
     }
@@ -156,41 +237,16 @@ public class ObraServiceImpl implements ObraService {
 
     @Override
     @Transactional
-    public Optional<Obra> actualizarObra(Integer id, Obra obra) {
-        return obraRepository.findById(id).map(existente -> {
+    public Optional<Obra> actualizarObra(Integer id, ObraDTO obra) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
+        return obraRepository.findByIdConCategoria(id).map(existente -> {
+            validarNoOcultaOEliminada(existente, id);
+            validarPertenencia(existente, idUsuarioAutenticado);
             validarNoRetiradaPorModeracionParaEditar(existente);
-            validarEstadoParaEdicion(existente);
-            String estadoActual = normalizarEstado(existente.getEstado());
-            String estadoObjetivo = estadoActual;
-
-            existente.setTitulo(obra.getTitulo());
-            existente.setDescripcion(obra.getDescripcion());
-            if (obra.getEstado() != null && !obra.getEstado().isBlank()) {
-                estadoObjetivo = normalizarEstado(obra.getEstado());
-                existente.setEstado(estadoObjetivo);
+            if (obra.getIdUsuario() != null && !idUsuarioAutenticado.equals(obra.getIdUsuario())) {
+                throw new ResponseStatusException(FORBIDDEN, "No puedes editar una obra de otro usuario.");
             }
-
-            // Solo permite fijar precio una vez, al pasar/estar en venta.
-            if (obra.getPrecio() != null
-                    && existente.getPrecio() == null
-                    && ESTADO_EN_VENTA.equals(estadoObjetivo)
-                    && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
-                existente.setPrecio(obra.getPrecio());
-            }
-
-            if (ESTADO_EN_VENTA.equals(estadoActual) && ESTADO_EN_EXHIBICION.equals(estadoObjetivo)) {
-                cancelarSolicitudesActivasDeObra(
-                        existente.getIdObra(),
-                        "La obra pas\u00F3 a En exhibici\u00F3n",
-                        "Tu solicitud para '%s' fue cancelada porque la obra pas\u00F3 a En exhibici\u00F3n.",
-                        false);
-            }
-
-            existente.setImagen1(obra.getImagen1());
-            existente.setImagen2(obra.getImagen2());
-            existente.setImagen3(obra.getImagen3());
-            existente.setTecnicas(obra.getTecnicas());
-            existente.setMedidas(obra.getMedidas());
+            aplicarActualizacionObra(existente, obra);
             return obraRepository.save(existente);
         });
     }
@@ -198,8 +254,12 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional
     public Obra guardarObraConCategoria(Integer usuarioId, ObraDTO obraDTO) {
-        Usuario usuario = usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + usuarioId));
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
+        if (obraDTO.getIdUsuario() != null && !idUsuarioAutenticado.equals(obraDTO.getIdUsuario())) {
+            throw new ResponseStatusException(FORBIDDEN, "No puedes publicar una obra para otro usuario.");
+        }
+        Usuario usuario = usuarioRepository.findById(idUsuarioAutenticado)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con ID: " + idUsuarioAutenticado));
 
         Obra obra = new Obra();
         aplicarCamposCreacion(obra, obraDTO);
@@ -208,6 +268,7 @@ public class ObraServiceImpl implements ObraService {
 
         Obra obraGuardada = obraRepository.save(obra);
         reemplazarCategoria(obraGuardada, obraDTO.getIdCategoria());
+        metaPersonalService.evaluarMetasDelUsuarioPorTipos(idUsuarioAutenticado, EnumSet.of(TipoMetaPersonal.PUBLICACIONES));
 
         return obraRepository.findByIdConCategoria(obraGuardada.getIdObra()).orElse(obraGuardada);
     }
@@ -215,96 +276,49 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional
     public Obra actualizarObraDeUsuario(Integer usuarioId, Integer obraId, ObraDTO obraDTO) {
-        log.info("ObraCrudBackendDebug UPDATE recibido usuarioId={} idObra={}", usuarioId, obraId);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
+        log.info("ObraCrudBackendDebug UPDATE recibido usuarioId={} idObra={}", idUsuarioAutenticado, obraId);
         Obra obraExistente = obraRepository.findByIdConCategoria(obraId)
                 .orElseThrow(() -> new NoSuchElementException("Obra no encontrada con ID: " + obraId));
 
         log.info("ObraCrudBackendDebug UPDATE existe=true idObra={} propietario={} usuarioId={} oculta={} estadoModeracion={}",
-                obraId, obtenerPropietarioId(obraExistente), usuarioId, obraExistente.getOculta(), obraExistente.getEstadoModeracion());
+                obraId, obtenerPropietarioId(obraExistente), idUsuarioAutenticado, obraExistente.getOculta(), obraExistente.getEstadoModeracion());
         validarNoOcultaOEliminada(obraExistente, obraId);
-        validarPertenencia(obraExistente, usuarioId);
-        log.info("ObraCrudBackendDebug UPDATE validacion propietario OK idObra={} usuarioId={}", obraId, usuarioId);
+        validarPertenencia(obraExistente, idUsuarioAutenticado);
+        log.info("ObraCrudBackendDebug UPDATE validacion propietario OK idObra={} usuarioId={}", obraId, idUsuarioAutenticado);
         validarNoRetiradaPorModeracionParaEditar(obraExistente);
-        validarEstadoParaEdicion(obraExistente);
-
-        if (obraDTO.getTitulo() != null) {
-            obraExistente.setTitulo(obraDTO.getTitulo());
-        }
-        if (obraDTO.getDescripcion() != null) {
-            obraExistente.setDescripcion(obraDTO.getDescripcion());
-        }
-        if (obraDTO.getImagen1() != null) {
-            obraExistente.setImagen1(obraDTO.getImagen1());
-        }
-        if (obraDTO.getImagen2() != null) {
-            obraExistente.setImagen2(obraDTO.getImagen2());
-        }
-        if (obraDTO.getImagen3() != null) {
-            obraExistente.setImagen3(obraDTO.getImagen3());
-        }
-        if (obraDTO.getTecnicas() != null) {
-            obraExistente.setTecnicas(obraDTO.getTecnicas());
-        }
-        if (obraDTO.getMedidas() != null) {
-            obraExistente.setMedidas(obraDTO.getMedidas());
-        }
-        obraExistente.setConfirmacionAutoria(obraDTO.getConfirmacionAutoria() != null ? obraDTO.getConfirmacionAutoria() : obraExistente.getConfirmacionAutoria());
-
-        String estadoActual = normalizarEstado(obraExistente.getEstado());
-        String estadoObjetivo = estadoActual;
-        if (obraDTO.getEstado() != null && !obraDTO.getEstado().isBlank()
-                && !ESTADO_VENDIDA.equals(estadoActual)
-                && !ESTADO_RESERVADA.equals(estadoActual)) {
-            estadoObjetivo = normalizarEstado(obraDTO.getEstado());
-            obraExistente.setEstado(estadoObjetivo);
-        }
-
-        if (obraDTO.getPrecio() != null
-                && ESTADO_EN_VENTA.equals(estadoObjetivo)
-                && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
-            obraExistente.setPrecio(obraDTO.getPrecio());
-        }
-
-        if (ESTADO_EN_VENTA.equals(estadoActual) && ESTADO_EN_EXHIBICION.equals(estadoObjetivo)) {
-            cancelarSolicitudesActivasDeObra(
-                    obraExistente.getIdObra(),
-                    "La obra pas\u00F3 a En exhibici\u00F3n",
-                    "Tu solicitud para '%s' fue cancelada porque la obra pas\u00F3 a En exhibici\u00F3n.",
-                    false);
-        }
-
-        if (obraDTO.getIdCategoria() != null && obraDTO.getIdCategoria() > 0) {
-            reemplazarCategoria(obraExistente, obraDTO.getIdCategoria());
-        }
+        aplicarActualizacionObra(obraExistente, obraDTO);
 
         Obra guardada = obraRepository.save(obraExistente);
-        log.info("ObraCrudBackendDebug UPDATE guardada idObra={} usuarioId={}", guardada.getIdObra(), usuarioId);
+        log.info("ObraCrudBackendDebug UPDATE guardada idObra={} usuarioId={}", guardada.getIdObra(), idUsuarioAutenticado);
         return obraRepository.findByIdConCategoria(guardada.getIdObra()).orElse(guardada);
     }
 
     @Override
     @Transactional
     public void eliminarObraDeUsuario(Integer usuarioId, Integer obraId) {
-        log.info("ObraCrudBackendDebug DELETE recibido usuarioId={} idObra={}", usuarioId, obraId);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
+        log.info("ObraCrudBackendDebug DELETE recibido usuarioId={} idObra={}", idUsuarioAutenticado, obraId);
         Obra obra = obraRepository.findById(obraId)
                 .orElseThrow(() -> new ResourceNotFoundException("Obra no encontrada con ID: " + obraId));
 
         log.info("ObraCrudBackendDebug DELETE existe=true idObra={} propietario={} usuarioId={} oculta={} estadoModeracion={}",
-                obraId, obtenerPropietarioId(obra), usuarioId, obra.getOculta(), obra.getEstadoModeracion());
+                obraId, obtenerPropietarioId(obra), idUsuarioAutenticado, obra.getOculta(), obra.getEstadoModeracion());
         validarNoOcultaOEliminada(obra, obraId);
-        validarPertenencia(obra, usuarioId);
-        log.info("ObraCrudBackendDebug DELETE validacion propietario OK idObra={} usuarioId={}", obraId, usuarioId);
+        validarPertenencia(obra, idUsuarioAutenticado);
+        log.info("ObraCrudBackendDebug DELETE validacion propietario OK idObra={} usuarioId={}", obraId, idUsuarioAutenticado);
         validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
-        int activasDespues = obraRepository.findPropiasActivasByUsuarioId(usuarioId, ESTADOS_NO_VISIBLES_PUBLICO).size();
+        int activasDespues = obraRepository.findPropiasActivasByUsuarioId(idUsuarioAutenticado, ESTADOS_NO_VISIBLES_PUBLICO).size();
         log.info("ObraCrudBackendDebug DELETE soft delete OK idObra={} usuarioId={} obrasActivasDespues={}",
-                obraId, usuarioId, activasDespues);
+                obraId, idUsuarioAutenticado, activasDespues);
     }
 
     @Override
     @Transactional
     public boolean eliminar(Integer id) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
         Obra obra = obraRepository.findById(id).orElse(null);
         if (obra == null) {
             return false;
@@ -313,6 +327,7 @@ public class ObraServiceImpl implements ObraService {
             log.info("ObraCrudBackendDebug DELETE /api/obras/{} no ejecutado: ya oculta/eliminada", id);
             return false;
         }
+        validarPertenencia(obra, idUsuarioAutenticado);
         validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
@@ -321,7 +336,10 @@ public class ObraServiceImpl implements ObraService {
 
     @Override
     public Optional<Obra> actualizarImagen1(Integer id, String urlImagen) {
+        Integer idUsuarioAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
         return obraRepository.findById(id).map(o -> {
+            validarNoOcultaOEliminada(o, id);
+            validarPertenencia(o, idUsuarioAutenticado);
             validarNoRetiradaPorModeracionParaEditar(o);
             o.setImagen1(urlImagen);
             return obraRepository.save(o);
@@ -331,11 +349,12 @@ public class ObraServiceImpl implements ObraService {
     @Override
     @Transactional(readOnly = true)
     public List<Obra> buscarPorUsuarioId(Integer usuarioId) {
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
         List<Obra> obras = obraRepository.findPropiasActivasByUsuarioId(
-                usuarioId,
+                idUsuarioAutenticado,
                 ESTADOS_NO_VISIBLES_PUBLICO
         );
-        log.info("PortafolioBackendDebug listado obras propias usuarioId={} totalActivas={}", usuarioId, obras.size());
+        log.info("PortafolioBackendDebug listado obras propias usuarioId={} totalActivas={}", idUsuarioAutenticado, obras.size());
         return obras;
     }
 
@@ -381,12 +400,78 @@ public class ObraServiceImpl implements ObraService {
         destino.setConfirmacionAutoria(Boolean.TRUE.equals(origen.getConfirmacionAutoria()));
     }
 
+    private void aplicarActualizacionObra(Obra existente, ObraDTO origen) {
+        validarEstadoParaEdicion(existente);
+
+        if (origen.getTitulo() != null) {
+            existente.setTitulo(origen.getTitulo());
+        }
+        if (origen.getDescripcion() != null) {
+            existente.setDescripcion(origen.getDescripcion());
+        }
+        if (origen.getImagen1() != null) {
+            existente.setImagen1(origen.getImagen1());
+        }
+        if (origen.getImagen2() != null) {
+            existente.setImagen2(origen.getImagen2());
+        }
+        if (origen.getImagen3() != null) {
+            existente.setImagen3(origen.getImagen3());
+        }
+        if (origen.getTecnicas() != null) {
+            existente.setTecnicas(origen.getTecnicas());
+        }
+        if (origen.getMedidas() != null) {
+            existente.setMedidas(origen.getMedidas());
+        }
+        if (origen.getConfirmacionAutoria() != null) {
+            existente.setConfirmacionAutoria(origen.getConfirmacionAutoria());
+        }
+
+        String estadoActual = normalizarEstado(existente.getEstado());
+        String estadoObjetivo = estadoActual;
+        if (origen.getEstado() != null && !origen.getEstado().isBlank()
+                && !ESTADO_VENDIDA.equals(estadoActual)
+                && !ESTADO_RESERVADA.equals(estadoActual)) {
+            estadoObjetivo = normalizarEstado(origen.getEstado());
+            existente.setEstado(estadoObjetivo);
+        }
+
+        if (origen.getPrecio() != null
+                && existente.getPrecio() == null
+                && ESTADO_EN_VENTA.equals(estadoObjetivo)
+                && (ESTADO_EN_EXHIBICION.equals(estadoActual) || ESTADO_EN_VENTA.equals(estadoActual))) {
+            existente.setPrecio(origen.getPrecio());
+        }
+
+        if (ESTADO_EN_VENTA.equals(estadoActual) && ESTADO_EN_EXHIBICION.equals(estadoObjetivo)) {
+            cancelarSolicitudesActivasDeObra(
+                    existente.getIdObra(),
+                    "La obra pas\u00F3 a En exhibici\u00F3n",
+                    "Tu solicitud para '%s' fue cancelada porque la obra pas\u00F3 a En exhibici\u00F3n.",
+                    false);
+        }
+
+        if (origen.getIdCategoria() != null && origen.getIdCategoria() > 0) {
+            reemplazarCategoria(existente, origen.getIdCategoria());
+        }
+    }
+
     private void reemplazarCategoria(Obra obra, Integer idCategoria) {
         if (idCategoria == null) {
             return;
         }
 
-        categoriaObraRepository.deleteByObraIdObra(obra.getIdObra());
+        Integer categoriaActual = obra.getCategoriaObras().stream()
+                .map(CategoriaObras::getCategoria)
+                .filter(java.util.Objects::nonNull)
+                .map(Categoria::getIdCategoria)
+                .findFirst()
+                .orElse(null);
+        if (java.util.Objects.equals(categoriaActual, idCategoria)) {
+            return;
+        }
+
         obra.getCategoriaObras().clear();
 
         if (idCategoria <= 0) {
@@ -470,6 +555,13 @@ public class ObraServiceImpl implements ObraService {
         return sinAcentos.toUpperCase()
                 .replaceAll("[^A-Z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");
+    }
+
+    private int normalizarLimitePopulares(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return LIMIT_POPULARES_DEFAULT;
+        }
+        return Math.min(limit, LIMIT_POPULARES_MAX);
     }
 
     private void validarCategoriaObra(Integer idCategoria) {

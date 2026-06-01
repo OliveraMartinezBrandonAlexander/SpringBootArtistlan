@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.ObraDTO;
 import com.example.demo.model.CategoriaObras;
 import com.example.demo.model.Obra;
@@ -31,6 +32,7 @@ public class ObrasDeUsuarioController {
     public ResponseEntity<List<ObraDTO>> obtenerObrasPorUsuario(
             @PathVariable Integer usuarioId,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
+        Integer usuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
         log.info("PortafolioBackendDebug GET obras propias recibido usuarioId={} usuarioIdConsulta={}", usuarioId, usuarioIdConsulta);
         if (usuarioId == null || usuarioId <= 0) {
             log.info("PortafolioBackendDebug GET obras propias 400 usuarioId invalido={}", usuarioId);
@@ -50,7 +52,7 @@ public class ObrasDeUsuarioController {
         }
 
         List<ObraDTO> dtos = obras.stream()
-                .map(o -> convertirADTO(o, usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId))
+                .map(o -> convertirADTO(o, usuarioAutenticado))
                 .collect(Collectors.toList());
 
         log.info("PortafolioBackendDebug GET obras propias usuarioId={} total={}", usuarioId, dtos.size());
@@ -62,6 +64,7 @@ public class ObrasDeUsuarioController {
             @PathVariable Integer usuarioId,
             @RequestBody ObraDTO obraDTO,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
+        Integer usuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
 
         if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -69,10 +72,7 @@ public class ObrasDeUsuarioController {
 
         try {
             Obra guardada = obraService.guardarObraConCategoria(usuarioId, obraDTO);
-            return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(
-                    guardada,
-                    usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId
-            ));
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertirADTO(guardada, usuarioAutenticado));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         }
@@ -84,6 +84,7 @@ public class ObrasDeUsuarioController {
             @PathVariable Integer obraId,
             @RequestBody ObraDTO obraDTO,
             @RequestParam(required = false) Integer usuarioIdConsulta) {
+        Integer usuarioAutenticado = SecurityUtils.validarAccesoUsuario(usuarioId);
 
         try {
             if (usuarioId == null || usuarioId <= 0 || obraId == null || obraId <= 0) {
@@ -91,10 +92,7 @@ public class ObrasDeUsuarioController {
                 return ResponseEntity.badRequest().build();
             }
             Obra actualizada = obraService.actualizarObraDeUsuario(usuarioId, obraId, obraDTO);
-            return ResponseEntity.ok(convertirADTO(
-                    actualizada,
-                    usuarioIdConsulta != null ? usuarioIdConsulta : usuarioId
-            ));
+            return ResponseEntity.ok(convertirADTO(actualizada, usuarioAutenticado));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         } catch (SecurityException e) {
@@ -108,6 +106,7 @@ public class ObrasDeUsuarioController {
     public ResponseEntity<Void> eliminarObraDeUsuario(
             @PathVariable Integer usuarioId,
             @PathVariable Integer obraId) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
 
         try {
             if (usuarioId == null || usuarioId <= 0 || obraId == null || obraId <= 0) {
@@ -127,6 +126,7 @@ public class ObrasDeUsuarioController {
 
     @DeleteMapping("/{usuarioId}")
     public ResponseEntity<Void> eliminarTodasLasObrasDeUsuario(@PathVariable Integer usuarioId) {
+        SecurityUtils.validarAccesoUsuario(usuarioId);
 
         if (usuarioService.buscarPorId(usuarioId).isEmpty()) {
             return ResponseEntity.notFound().build();

@@ -1,7 +1,9 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CapturarOrdenPaypalCarritoResponseDTO;
 import com.example.demo.dto.CrearOrdenPaypalCarritoResponseDTO;
+import com.example.demo.enums.TipoMetaPersonal;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.model.Carrito;
 import com.example.demo.model.CompraCarrito;
@@ -10,6 +12,7 @@ import com.example.demo.model.Obra;
 import com.example.demo.repository.CarritoRepository;
 import com.example.demo.repository.CompraCarritoRepository;
 import com.example.demo.repository.SolicitudCompraObraRepository;
+import com.example.demo.service.MetaPersonalService;
 import com.example.demo.service.NotificacionService;
 import com.example.demo.service.ObraService;
 import com.example.demo.service.PaypalCarritoService;
@@ -31,13 +34,17 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -53,14 +60,16 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
     private final CompraCarritoRepository compraCarritoRepository;
     private final SolicitudCompraObraRepository solicitudCompraObraRepository;
     private final ObraService obraService;
+    private final MetaPersonalService metaPersonalService;
     private final NotificacionService notificacionService;
 
     @Override
     @Transactional
     public CrearOrdenPaypalCarritoResponseDTO crearOrdenParaCarrito(Integer idUsuario) {
-        limpiarComprasPendientesNoCapturadas(idUsuario);
+        Integer idCompradorAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        limpiarComprasPendientesNoCapturadas(idCompradorAutenticado);
 
-        List<Carrito> itemsCarrito = carritoRepository.findByUsuarioId(idUsuario);
+        List<Carrito> itemsCarrito = carritoRepository.findByUsuarioId(idCompradorAutenticado);
         if (itemsCarrito.isEmpty()) {
             throw new BusinessException("El carrito esta vacio");
         }
@@ -69,7 +78,7 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
         BigDecimal montoTotal = BigDecimal.ZERO;
 
         for (Carrito item : itemsCarrito) {
-            validarReserva(item, idUsuario);
+            validarReserva(item, idCompradorAutenticado);
 
             Obra obra = item.getObra();
             BigDecimal precioUnitario = obtenerMontoDesdeObra(obra);
@@ -126,12 +135,14 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
     @Override
     @Transactional
     public CapturarOrdenPaypalCarritoResponseDTO capturarOrdenCarrito(String paypalOrderId) {
+        Integer idCompradorAutenticado = SecurityUtils.obtenerIdUsuarioAutenticado();
         CompraCarrito compraCarrito = compraCarritoRepository.findByPaypalOrderIdConDetalles(paypalOrderId)
                 .orElseThrow(() -> new EntityNotFoundException("No existe una compra de carrito para la orden PayPal: " + paypalOrderId));
 
-        if (ESTADO_CAPTURADA.equalsIgnoreCase(compraCarrito.getEstado())) {
-            throw new BusinessException("La orden del carrito ya fue capturada previamente");
-        }
+        validarOrdenPerteneceAlComprador(compraCarrito, idCompradorAutenticado);
+        validarEstadoCapturable(compraCarrito.getEstado(),
+                "La orden del carrito ya fue capturada previamente",
+                "La orden del carrito no esta en un estado valido para captura");
 
         validarReservaActualAntesDeCapturar(compraCarrito);
 
@@ -155,6 +166,7 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
             compraCarrito.setFechaCaptura(fechaCaptura);
             compraCarritoRepository.save(compraCarrito);
 
+            Set<Integer> vendedoresEvaluar = new LinkedHashSet<>();
             for (CompraCarritoDetalle detalle : compraCarrito.getDetalles()) {
                 Integer idSolicitud = detalle.getSolicitud() != null ? detalle.getSolicitud().getIdSolicitud() : null;
                 if (idSolicitud == null) {
@@ -176,6 +188,10 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
                         "OBRA",
                         idObra
                 );
+
+                if (detalle.getVendedor() != null && detalle.getVendedor().getIdUsuario() != null) {
+                    vendedoresEvaluar.add(detalle.getVendedor().getIdUsuario());
+                }
             }
 
             int totalObras = compraCarrito.getDetalles().size();
@@ -187,6 +203,13 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
                     "TRANSACCION",
                     compraCarrito.getIdCompraCarrito()
             );
+
+            for (Integer idVendedor : vendedoresEvaluar) {
+                metaPersonalService.evaluarMetasDelUsuarioPorTipos(
+                        idVendedor,
+                        EnumSet.of(TipoMetaPersonal.VENTAS, TipoMetaPersonal.INGRESOS)
+                );
+            }
 
             return CapturarOrdenPaypalCarritoResponseDTO.builder()
                     .idCompraCarrito(compraCarrito.getIdCompraCarrito())
@@ -209,6 +232,12 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
     private void validarReserva(Carrito item, Integer idUsuario) {
         if (!idUsuario.equals(item.getUsuario().getIdUsuario())) {
             throw new BusinessException("Carrito invalido");
+        }
+        if (item.getObra() != null
+                && item.getObra().getUsuario() != null
+                && idUsuario.equals(item.getObra().getUsuario().getIdUsuario())) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes comprar tus propias obras.");
         }
         if (item.getReservadaHasta() != null && item.getReservadaHasta().isBefore(LocalDateTime.now())) {
             throw new BusinessException("La reserva de una obra expiro");
@@ -343,5 +372,25 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
         }
         String sufijo = (detalle == null || detalle.isBlank()) ? "" : " Detalle: " + detalle;
         return new BusinessException("No se pudo " + accion + " en PayPal." + sufijo);
+    }
+
+    private void validarOrdenPerteneceAlComprador(CompraCarrito compraCarrito, Integer idCompradorAutenticado) {
+        Integer idCompradorOrden = compraCarrito.getComprador() != null ? compraCarrito.getComprador().getIdUsuario() : null;
+        if (idCompradorOrden == null) {
+            throw new BusinessException("La orden PayPal del carrito no tiene comprador asociado");
+        }
+        if (!idCompradorOrden.equals(idCompradorAutenticado)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "No puedes capturar una orden de carrito de otro usuario.");
+        }
+    }
+
+    private void validarEstadoCapturable(String estadoActual, String mensajeYaCapturada, String mensajeEstadoInvalido) {
+        if (ESTADO_CAPTURADA.equalsIgnoreCase(estadoActual)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, mensajeYaCapturada);
+        }
+        if (!ESTADO_CREADA.equalsIgnoreCase(estadoActual)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, mensajeEstadoInvalido);
+        }
     }
 }

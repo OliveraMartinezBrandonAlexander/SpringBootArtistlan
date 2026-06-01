@@ -76,4 +76,11 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Inte
               AND n.eliminada = false
             """)
     int marcarTodasLeidas(@Param("usuarioId") Integer usuarioId);
+
+    boolean existsByUsuarioDestinoIdUsuarioAndReferenciaTipoIgnoreCaseAndReferenciaIdAndTipoNotificacionIgnoreCase(
+            Integer usuarioId,
+            String referenciaTipo,
+            Integer referenciaId,
+            String tipoNotificacion
+    );
 }

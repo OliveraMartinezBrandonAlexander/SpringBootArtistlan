@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.config.SecurityUtils;
 import com.example.demo.enums.EstadoCuenta;
 import com.example.demo.dto.notificacion.NotificacionDTO;
 import com.example.demo.exception.ResourceNotFoundException;
@@ -39,23 +40,26 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional(readOnly = true)
     public List<NotificacionDTO> listarPorUsuario(Integer idUsuario) {
-        validarUsuarioExiste(idUsuario);
-        return notificacionRepository.findActivasPorUsuario(idUsuario).stream().map(this::toDto).toList();
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        return notificacionRepository.findActivasPorUsuario(idUsuarioAutenticado).stream().map(this::toDto).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<NotificacionDTO> listarPorUsuarioPaginado(Integer idUsuario, boolean soloNoLeidas, String tipo, Pageable pageable) {
-        validarUsuarioExiste(idUsuario);
-        return notificacionRepository.findActivasPorUsuarioPaginado(idUsuario, soloNoLeidas, tipo, pageable)
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        return notificacionRepository.findActivasPorUsuarioPaginado(idUsuarioAutenticado, soloNoLeidas, tipo, pageable)
                 .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public NotificacionDTO obtenerDetalle(Integer idUsuario, Integer idNotificacion) {
-        validarUsuarioExiste(idUsuario);
-        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuarioAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         return toDto(notificacion);
     }
@@ -63,8 +67,9 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional
     public NotificacionDTO marcarLeida(Integer idUsuario, Integer idNotificacion) {
-        validarUsuarioExiste(idUsuario);
-        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuarioAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         notificacion.setLeida(true);
         return toDto(notificacionRepository.save(notificacion));
@@ -73,15 +78,17 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional
     public void marcarTodasLeidas(Integer idUsuario) {
-        validarUsuarioExiste(idUsuario);
-        notificacionRepository.marcarTodasLeidas(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        notificacionRepository.marcarTodasLeidas(idUsuarioAutenticado);
     }
 
     @Override
     @Transactional
     public void eliminarLogicamente(Integer idUsuario, Integer idNotificacion) {
-        validarUsuarioExiste(idUsuario);
-        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuario)
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        Notificacion notificacion = notificacionRepository.findDetalle(idNotificacion, idUsuarioAutenticado)
                 .orElseThrow(() -> new ResourceNotFoundException("Notificacion no encontrada"));
         notificacion.setEliminada(true);
         notificacionRepository.save(notificacion);
@@ -90,8 +97,9 @@ public class NotificacionServiceImpl implements NotificacionService {
     @Override
     @Transactional(readOnly = true)
     public long contarNoLeidas(Integer idUsuario) {
-        validarUsuarioExiste(idUsuario);
-        return notificacionRepository.countByUsuarioDestinoIdUsuarioAndLeidaFalseAndEliminadaFalse(idUsuario);
+        Integer idUsuarioAutenticado = SecurityUtils.validarAccesoUsuario(idUsuario);
+        validarUsuarioExiste(idUsuarioAutenticado);
+        return notificacionRepository.countByUsuarioDestinoIdUsuarioAndLeidaFalseAndEliminadaFalse(idUsuarioAutenticado);
     }
 
     @Override
