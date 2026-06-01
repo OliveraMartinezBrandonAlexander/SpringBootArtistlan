@@ -169,6 +169,20 @@ public class UsuarioServiceImpl implements UsuarioService {
     }
 
     @Override
+    public Optional<Usuario> buscarPorUsuario(String usuario) {
+        if (usuario == null || usuario.isBlank()) {
+            return Optional.empty();
+        }
+        return repo.findFirstByUsuarioIgnoreCase(usuario.trim());
+    }
+
+    @Override
+    public Optional<Usuario> buscarCuentaRecuperablePorUsuario(String usuario) {
+        return buscarPorUsuario(usuario)
+                .filter(this::esCuentaRecuperableParaPasswordReset);
+    }
+
+    @Override
     public Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo) {
         if (usuarioOCorreo == null || usuarioOCorreo.isBlank()) {
             return Optional.empty();

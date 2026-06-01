@@ -28,6 +28,10 @@ public interface UsuarioService {
 
     Usuario validarCuentaRecuperableParaPasswordReset(Usuario usuario);
 
+    Optional<Usuario> buscarPorUsuario(String usuario);
+
+    Optional<Usuario> buscarCuentaRecuperablePorUsuario(String usuario);
+
     Optional<Usuario> buscarPorUsuarioOCorreo(String usuarioOCorreo);
 
     Optional<Usuario> buscarCuentaRecuperablePorUsuarioOCorreo(String usuarioOCorreo);

@@ -17,9 +17,9 @@ import org.springframework.web.server.ResponseStatusException;
 public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
-    private static final String SUBJECT_OTP = "Tu codigo de verificacion de Artistlan";
-    private static final String SUBJECT_PASSWORD_RESET = "Recuperacion de contrasena de Artistlan";
-    private static final String SMTP_ERROR_MESSAGE = "No se pudo enviar el codigo por correo. Revisa la configuracion SMTP.";
+    private static final String SUBJECT_OTP = "Tu c\u00F3digo de verificaci\u00F3n de Artistlan";
+    private static final String SUBJECT_PASSWORD_RESET = "C\u00F3digo de recuperaci\u00F3n de contrase\u00F1a - Artistlan";
+    private static final String SMTP_ERROR_MESSAGE = "No se pudo enviar el c\u00F3digo por correo. Revisa la configuraci\u00F3n SMTP.";
 
     private final JavaMailSender mailSender;
 
@@ -45,14 +45,14 @@ public class EmailServiceImpl implements EmailService {
                 """
                 Hola,
 
-                Recibimos una solicitud para iniciar sesion o activar la verificacion en dos pasos (2FA) en tu cuenta de Artistlan.
+                Recibimos una solicitud para iniciar sesi\u00F3n o activar la verificaci\u00F3n en dos pasos (2FA) en tu cuenta de Artistlan.
 
-                Tu codigo de verificacion es:
+                Tu c\u00F3digo de verificaci\u00F3n es:
                 %s
 
-                Este codigo expira en 5 minutos.
+                Este c\u00F3digo expira en 5 minutos.
 
-                Si no solicitaste este codigo, puedes ignorar este mensaje.
+                Si no solicitaste este c\u00F3digo, puedes ignorar este mensaje.
 
                 Equipo Artistlan
                 """.formatted(codigoFormateado)
@@ -69,15 +69,16 @@ public class EmailServiceImpl implements EmailService {
                 """
                 Hola,
 
-                Recibimos una solicitud para recuperar la contrasena de tu cuenta de Artistlan.
+                Recibimos una solicitud para recuperar la contrase\u00F1a de tu cuenta de Artistlan.
 
-                Tu codigo de recuperacion es:
+                Tu c\u00F3digo de recuperaci\u00F3n es:
                 %s
 
-                Este codigo expira en 5 minutos.
+                Este c\u00F3digo es v\u00E1lido por 5 minutos.
 
-                Si no solicitaste esta recuperacion de contrasena, puedes ignorar este mensaje.
+                Si no solicitaste este cambio, puedes ignorar este mensaje.
 
+                Atentamente,
                 Equipo Artistlan
                 """.formatted(codigoFormateado)
         );
@@ -92,12 +93,12 @@ public class EmailServiceImpl implements EmailService {
 
     private void validarConfiguracionMinimaSmtp() {
         if (isBlank(springMailHost)) {
-            log.error("Configuracion SMTP incompleta: spring.mail.host vacio. Variables esperadas: SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD, ARTISTLAN_MAIL_FROM(opcional).");
+            log.error("Configuraci\u00F3n SMTP incompleta: spring.mail.host vac\u00EDo. Variables esperadas: SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD, ARTISTLAN_MAIL_FROM(opcional).");
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, SMTP_ERROR_MESSAGE);
         }
 
         if (isBlank(mailFrom) && isBlank(springMailUsername)) {
-            log.error("Configuracion SMTP incompleta: no hay remitente. Define ARTISTLAN_MAIL_FROM o SPRING_MAIL_USERNAME.");
+            log.error("Configuraci\u00F3n SMTP incompleta: no hay remitente. Define ARTISTLAN_MAIL_FROM o SPRING_MAIL_USERNAME.");
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, SMTP_ERROR_MESSAGE);
         }
     }

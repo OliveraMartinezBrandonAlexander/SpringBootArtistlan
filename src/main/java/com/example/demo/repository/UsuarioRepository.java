@@ -21,6 +21,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Integer> {
     boolean existsByUsuarioIgnoreCaseAndIdUsuarioNot(String usuario, Integer idUsuario);
     boolean existsByCorreoIgnoreCaseAndIdUsuarioNot(String correo, Integer idUsuario);
 
+    Optional<Usuario> findFirstByUsuarioIgnoreCase(String usuario);
+
     Optional<Usuario> findFirstByUsuarioIgnoreCaseOrCorreoIgnoreCase(String usuario, String correo);
 
     @Query("SELECT u FROM Usuario u LEFT JOIN FETCH u.categoriasUsuarios cu LEFT JOIN FETCH cu.categoria WHERE u.idUsuario = :id")

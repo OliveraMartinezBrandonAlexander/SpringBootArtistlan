@@ -26,10 +26,12 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PasswordResetController {
 
-    private static final String GENERIC_REQUEST_MESSAGE =
-            "Si la cuenta existe y es recuperable, enviaremos un codigo de recuperacion.";
-    private static final String GENERIC_RESEND_MESSAGE =
-            "Si la solicitud sigue siendo valida, enviaremos un nuevo codigo.";
+    private static final String USER_NOT_FOUND_MESSAGE =
+            "Usuario no encontrado. Verifica el nombre de usuario e int\u00E9ntalo nuevamente.";
+    private static final String REQUEST_SUCCESS_MESSAGE =
+            "C\u00F3digo enviado. Revisa el correo asociado a tu cuenta.";
+    private static final String RESEND_SUCCESS_MESSAGE =
+            "C\u00F3digo reenviado. Revisa el correo asociado a tu cuenta.";
 
     private final UsuarioService usuarioService;
     private final TwoFactorService twoFactorService;
@@ -37,20 +39,14 @@ public class PasswordResetController {
     @PostMapping("/request")
     public ResponseEntity<PasswordResetResponseDTO> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequestDTO request) {
-        Optional<Usuario> usuarioOpt = usuarioService.buscarCuentaRecuperablePorUsuarioOCorreo(request.getUsuarioOCorreo());
+        Optional<Usuario> usuarioOpt = usuarioService.buscarPorUsuario(request.getUsuarioOCorreo());
         if (usuarioOpt.isEmpty()) {
-            return ResponseEntity.ok(buildResponse(GENERIC_REQUEST_MESSAGE, null));
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, USER_NOT_FOUND_MESSAGE);
         }
 
-        try {
-            TwoFactorToken token = twoFactorService.crearTokenPasswordResetYEnviarCodigo(usuarioOpt.get());
-            return ResponseEntity.ok(buildResponse(GENERIC_REQUEST_MESSAGE, token.getTemporaryToken()));
-        } catch (ResponseStatusException ex) {
-            if (ex.getStatusCode().value() == HttpStatus.FORBIDDEN.value()) {
-                return ResponseEntity.ok(buildResponse(GENERIC_REQUEST_MESSAGE, null));
-            }
-            throw ex;
-        }
+        Usuario usuario = usuarioService.validarCuentaRecuperableParaPasswordReset(usuarioOpt.get());
+        TwoFactorToken token = twoFactorService.crearTokenPasswordResetYEnviarCodigo(usuario);
+        return ResponseEntity.ok(buildResponse(REQUEST_SUCCESS_MESSAGE, token.getTemporaryToken()));
     }
 
     @Transactional
@@ -69,7 +65,7 @@ public class PasswordResetController {
 
         return ResponseEntity.ok(PasswordResetResponseDTO.builder()
                 .success(true)
-                .message("Contrasena actualizada correctamente.")
+                .message("Contrase\u00F1a actualizada correctamente.")
                 .temporaryToken(null)
                 .build());
     }
@@ -78,7 +74,7 @@ public class PasswordResetController {
     public ResponseEntity<PasswordResetResponseDTO> resendPasswordResetCode(
             @Valid @RequestBody PasswordResetResendRequestDTO request) {
         twoFactorService.reenviarCodigoPasswordReset(request.getTemporaryToken());
-        return ResponseEntity.ok(buildResponse(GENERIC_RESEND_MESSAGE, null));
+        return ResponseEntity.ok(buildResponse(RESEND_SUCCESS_MESSAGE, null));
     }
 
     private PasswordResetResponseDTO buildResponse(String message, String temporaryToken) {
