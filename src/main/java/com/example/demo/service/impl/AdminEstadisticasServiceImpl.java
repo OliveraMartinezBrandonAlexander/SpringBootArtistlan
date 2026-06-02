@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.TextStyle;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 
@@ -121,10 +122,11 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
     @Transactional(readOnly = true)
     public AdminCrecimientoDTO obtenerCrecimientoSemanal(AdminDashboardTipo tipo, LocalDate fechaReferencia) {
         LocalDate fechaBase = fechaReferencia != null ? fechaReferencia : LocalDate.now();
+        LocalDate hoy = LocalDate.now();
         RangoSemana semanaActual = validarYConstruirSemana(fechaBase);
         RangoSemana semanaAnterior = construirSemanaAnterior(semanaActual);
 
-        Map<LocalDate, Long> serieActual = switch (tipo) {
+        Map<LocalDate, Long> serieActualBase = switch (tipo) {
             case OBRAS -> construirSerieConteo(semanaActual.inicio(), semanaActual.fin(),
                     adminEstadisticasRepository.obtenerPublicacionesObrasPorDia(
                             semanaActual.inicio(), semanaActual.fin()));
@@ -135,6 +137,7 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
                     adminEstadisticasRepository.obtenerArtistasNuevosPorDia(
                             semanaActual.inicio(), semanaActual.fin()));
         };
+        Map<LocalDate, Long> serieActual = ajustarSerieSemanaActualEnCurso(serieActualBase, semanaActual, hoy);
 
         Map<LocalDate, Long> serieAnterior = switch (tipo) {
             case OBRAS -> construirSerieConteo(semanaAnterior.inicio(), semanaAnterior.fin(),
@@ -150,6 +153,7 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
 
         long totalActual = serieActual.values().stream().mapToLong(Long::longValue).sum();
         long totalAnterior = serieAnterior.values().stream().mapToLong(Long::longValue).sum();
+        int diasComparados = resolverDiasComparadosSemanaActual(semanaActual, hoy);
 
         Double porcentajeCambio = null;
         boolean periodoAnteriorSinDatos = totalAnterior == 0;
@@ -181,7 +185,7 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
                 .fechaFinSemanaAnterior(semanaAnterior.fin())
                 .serieSemanaActual(construirPuntosConteo(serieActual))
                 .serieSemanaAnterior(construirPuntosConteo(serieAnterior))
-                .diasComparados(7)
+                .diasComparados(diasComparados)
                 .totalSemanaActual(totalActual)
                 .totalSemanaAnterior(totalAnterior)
                 .porcentajeCambio(porcentajeCambio != null ? redondear(porcentajeCambio) : null)
@@ -345,6 +349,42 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
             serie.put(toLocalDate(fila[0]), toLong(fila[1]));
         }
         return serie;
+    }
+
+    private Map<LocalDate, Long> ajustarSerieSemanaActualEnCurso(Map<LocalDate, Long> serieOriginal,
+                                                                 RangoSemana semanaActual,
+                                                                 LocalDate hoy) {
+        if (hoy.isBefore(semanaActual.inicio()) || hoy.isAfter(semanaActual.fin())) {
+            return serieOriginal;
+        }
+
+        Map<LocalDate, Long> serieAjustada = new LinkedHashMap<>();
+        long remanentePosterior = 0L;
+
+        for (Map.Entry<LocalDate, Long> entry : serieOriginal.entrySet()) {
+            LocalDate fecha = entry.getKey();
+            long valor = Math.max(0L, entry.getValue());
+
+            if (fecha.isAfter(hoy)) {
+                remanentePosterior += valor;
+                serieAjustada.put(fecha, 0L);
+                continue;
+            }
+
+            serieAjustada.put(fecha, valor);
+        }
+
+        if (remanentePosterior > 0L && serieAjustada.containsKey(hoy)) {
+            serieAjustada.put(hoy, serieAjustada.get(hoy) + remanentePosterior);
+        }
+        return serieAjustada;
+    }
+
+    private int resolverDiasComparadosSemanaActual(RangoSemana semanaActual, LocalDate hoy) {
+        if (hoy.isBefore(semanaActual.inicio()) || hoy.isAfter(semanaActual.fin())) {
+            return (int) (ChronoUnit.DAYS.between(semanaActual.inicio(), semanaActual.fin()) + 1);
+        }
+        return (int) ChronoUnit.DAYS.between(semanaActual.inicio(), hoy) + 1;
     }
 
     private List<AdminPuntoSerieDTO> construirPuntosConteo(Map<LocalDate, Long> serie) {
