@@ -5,6 +5,7 @@ import com.example.demo.dto.chatbot.ChatbotRequestDTO;
 import com.example.demo.dto.chatbot.ChatbotResponseDTO;
 import com.example.demo.enums.ChatbotSource;
 import com.example.demo.service.ChatbotService;
+import com.example.demo.service.GeminiChatbotFallbackService;
 import com.google.cloud.dialogflow.v2.DetectIntentRequest;
 import com.google.cloud.dialogflow.v2.DetectIntentResponse;
 import com.google.cloud.dialogflow.v2.QueryInput;
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -27,9 +29,15 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DialogflowChatbotServiceImpl implements ChatbotService {
 
+    private static final double LOW_CONFIDENCE_THRESHOLD = 0.55;
+    private static final String LOOP_HINT =
+            "Parece que seguimos en el mismo tema. También puedo ayudarte con otra sección de Artistlan.";
+
     private final DialogflowConfig dialogflowConfig;
     private final ChatbotIntentActionMapper intentActionMapper;
     private final LocalChatbotFallbackServiceImpl localFallbackService;
+    private final GeminiChatbotFallbackService geminiFallbackService;
+    private final ChatbotReplyFinalizer replyFinalizer;
 
     private final Object clientLock = new Object();
     private volatile SessionsClient sessionsClient;
@@ -42,35 +50,57 @@ public class DialogflowChatbotServiceImpl implements ChatbotService {
         }
 
         if (!dialogflowConfig.isEnabled()) {
-            return localFallbackService.processMessage(request);
+            return fallbackAfterDialogflowMiss(request, message);
         }
 
         try {
             DetectIntentResponse response = detectIntent(request, message.trim());
             QueryResult queryResult = response.getQueryResult();
             String reply = queryResult.getFulfillmentText();
-
-            if (reply == null || reply.trim().isEmpty()) {
-                return localFallbackService.processMessage(request);
-            }
-
             String intent = normalizeIntentName(queryResult);
-            if (intent == null || intent.isBlank()) {
-                return localFallbackService.processMessage(request);
+            double confidence = queryResult.getIntentDetectionConfidence();
+
+            if (reply == null || reply.trim().isEmpty()
+                    || intent == null || intent.isBlank()
+                    || isFallbackIntent(intent)
+                    || confidence < LOW_CONFIDENCE_THRESHOLD) {
+                return fallbackAfterDialogflowMiss(request, message);
             }
+
+            ChatbotIntentActionMapper.QuickReplySelection quickReplySelection =
+                    intentActionMapper.quickReplySelectionFor(intent, resolveQuickReplySessionId(request));
+            String finalReply = quickReplySelection.loopDetected() ? reply + "\n\n" + LOOP_HINT : reply;
 
             return ChatbotResponseDTO.builder()
-                    .reply(reply.trim())
+                    .reply(replyFinalizer.withNaturalClosing(finalReply))
                     .intent(intent)
                     .source(ChatbotSource.DIALOGFLOW.name())
-                    .confidence((double) queryResult.getIntentDetectionConfidence())
-                    .quickReplies(intentActionMapper.quickRepliesFor(intent))
+                    .confidence(confidence)
+                    .quickReplies(quickReplySelection.quickReplies())
                     .actions(intentActionMapper.actionsFor(intent))
                     .build();
         } catch (Exception ex) {
-            log.warn("No fue posible consultar Dialogflow. Se usará fallback local: {}", ex.getClass().getSimpleName());
-            return localFallbackService.processMessage(request);
+            log.warn("No fue posible consultar Dialogflow. Se usara fallback seguro: {}", ex.getClass().getSimpleName());
+            return fallbackAfterDialogflowMiss(request, message);
         }
+    }
+
+    private ChatbotResponseDTO fallbackAfterDialogflowMiss(ChatbotRequestDTO request, String message) {
+        ChatbotResponseDTO localResponse = localFallbackService.processMessage(request);
+        if (!isFallbackIntent(localResponse.getIntent())) {
+            return localResponse;
+        }
+
+        return geminiFallbackService.generateReply(message)
+                .map(reply -> ChatbotResponseDTO.builder()
+                        .reply(reply)
+                        .intent("DEFAULT_FALLBACK")
+                        .source(ChatbotSource.GEMINI.name())
+                        .confidence(LOW_CONFIDENCE_THRESHOLD)
+                        .quickReplies(intentActionMapper.quickRepliesFor("DEFAULT_FALLBACK", resolveQuickReplySessionId(request)))
+                        .actions(List.of())
+                        .build())
+                .orElse(localResponse);
     }
 
     private DetectIntentResponse detectIntent(ChatbotRequestDTO request, String message) throws IOException {
@@ -139,6 +169,17 @@ public class DialogflowChatbotServiceImpl implements ChatbotService {
             return "DEFAULT_FALLBACK";
         }
         return normalized;
+    }
+
+    private boolean isFallbackIntent(String intent) {
+        if (intent == null || intent.trim().isEmpty()) {
+            return true;
+        }
+        return intent.trim().toUpperCase().contains("FALLBACK");
+    }
+
+    private String resolveQuickReplySessionId(ChatbotRequestDTO request) {
+        return request != null ? request.getSessionId() : null;
     }
 
     @PreDestroy
