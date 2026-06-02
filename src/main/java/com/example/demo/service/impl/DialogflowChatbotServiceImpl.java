@@ -49,6 +49,11 @@ public class DialogflowChatbotServiceImpl implements ChatbotService {
             return localFallbackService.processMessage(request);
         }
 
+        String localIntent = localFallbackService.detectIntentForMessage(message);
+        if (localFallbackService.shouldHandleLocally(localIntent)) {
+            return localFallbackService.buildResponseForIntent(localIntent, request);
+        }
+
         if (!dialogflowConfig.isEnabled()) {
             return fallbackAfterDialogflowMiss(request, message);
         }

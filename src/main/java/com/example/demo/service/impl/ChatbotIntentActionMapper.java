@@ -55,12 +55,15 @@ public class ChatbotIntentActionMapper {
             case "PUBLICAR_SERVICIO_GUIA" -> actions(
                     action("Ir a subir servicio", ChatbotActionType.NAV_SUBIR_SERVICIO)
             );
+            case "METAS_PERSONALES_ORIENTACION", "DEFINICION_META" -> actions(
+                    action("Ver mis metas", ChatbotActionType.NAV_MIS_METAS)
+            );
             case "PORTAFOLIO_CONTENIDO_PROPIO" -> actions(
                     action("Ver portafolio", ChatbotActionType.NAV_PORTAFOLIO),
                     action("Ir a subir obra", ChatbotActionType.NAV_SUBIR_OBRA),
                     action("Ir a subir servicio", ChatbotActionType.NAV_SUBIR_SERVICIO)
             );
-            case "EXPLORAR_BUSCAR_CONTENIDO" -> actions(
+            case "EXPLORAR_BUSCAR_CONTENIDO", "DEFINICION_ARTISTA" -> actions(
                     action("Ir a explorar", ChatbotActionType.NAV_EXPLORAR)
             );
             case "CONTACTO_ARTISTA" -> actions(
@@ -89,12 +92,15 @@ public class ChatbotIntentActionMapper {
             case "CONVOCATORIAS_ORIENTACION" -> actions(
                     action("Ver convocatorias", ChatbotActionType.NAV_CONVOCATORIAS)
             );
+            case "ESTADISTICAS_ADMIN_ORIENTACION" -> statisticsActionsForCurrentUser();
+            case "CONVOCATORIAS_ADMIN_ORIENTACION" -> adminConvocatoriasActionsForCurrentUser();
+            case "USUARIOS_ADMIN_ORIENTACION" -> adminUsersActionsForCurrentUser();
+            case "MODERACION_REPORTES_ORIENTACION" -> moderationActionsForCurrentUser();
             case "MODERACION_ADMIN_ORIENTACION", "ADMIN_RESTRINGIDO_ORIENTACION" -> restrictedActionsForCurrentUser();
             case "AYUDA_GENERAL_APP" -> actions(
                     action("Ir a explorar", ChatbotActionType.NAV_EXPLORAR),
-                    action("Ver portafolio", ChatbotActionType.NAV_PORTAFOLIO),
-                    action("Ver solicitudes", ChatbotActionType.NAV_SOLICITUDES),
-                    action("Ver carrito", ChatbotActionType.NAV_CARRITO)
+                    action("Ver convocatorias", ChatbotActionType.NAV_CONVOCATORIAS),
+                    action("Ver mis metas", ChatbotActionType.NAV_MIS_METAS)
             );
             default -> List.of();
         };
@@ -106,41 +112,78 @@ public class ChatbotIntentActionMapper {
             case "PUBLICAR_CONTENIDO" -> List.of("Subir obra", "Subir servicio", "Cómo comprar una obra", "Ver portafolio", "Ayuda general");
             case "PUBLICAR_OBRA_GUIA" -> List.of("Ir a subir obra", "Subir servicio", "Cómo comprar una obra", "Ver portafolio", "Ayuda general");
             case "PUBLICAR_SERVICIO_GUIA" -> List.of("Ir a subir servicio", "Subir obra", "Explorar servicios", "Ver portafolio", "Ayuda general");
+            case "DEFINICION_OBRA" -> List.of("Qué es un servicio", "Qué es un artista", "Explorar obras", "Ver portafolio", "Ayuda general");
+            case "DEFINICION_SERVICIO" -> List.of("Qué es una obra", "Qué es un artista", "Explorar servicios", "Ver artistas", "Ayuda general");
+            case "DEFINICION_ARTISTA" -> List.of("Qué es una obra", "Qué es un servicio", "Ver artistas", "Explorar obras", "Ayuda general");
+            case "DEFINICION_META", "METAS_PERSONALES_ORIENTACION" -> List.of("Ver mis metas", "Crear meta", "Ver convocatorias", "Seguridad de cuenta", "Ayuda general");
+            case "DEFINICION_SOLICITUD" -> List.of("Ver solicitudes", "Ver notificaciones", "Cómo comprar una obra", "Ver mis compras", "Ayuda general");
+            case "DEFINICION_PORTAFOLIO" -> List.of("Ver portafolio", "Subir obra", "Subir servicio", "Explorar obras", "Ayuda general");
+            case "DEFINICION_CONVOCATORIA" -> List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Ayuda general");
+            case "DEFINICION_TRANSACCION" -> List.of("Ver mis compras", "Ver mis ventas", "Ver solicitudes", "Cómo comprar una obra", "Ayuda general");
+            case "DEFINICION_FAVORITO" -> List.of("Ver favoritos", "Explorar obras", "Ver artistas", "Ver mis metas", "Ayuda general");
+            case "DEFINICION_2FA" -> List.of("Seguridad de cuenta", "Ver perfil", "Recuperar contraseña", "Ver notificaciones", "Ayuda general");
             case "PORTAFOLIO_CONTENIDO_PROPIO" -> List.of("Ver portafolio", "Subir obra", "Subir servicio", "Explorar obras", "Ayuda general");
-            case "EXPLORAR_BUSCAR_CONTENIDO" -> List.of("Explorar obras", "Explorar servicios", "Ver artistas", "Cómo subir una obra", "Ayuda general");
+            case "EXPLORAR_BUSCAR_CONTENIDO" -> List.of("Explorar obras", "Explorar servicios", "Ver artistas", "Qué es una obra", "Ayuda general");
             case "CONTACTO_ARTISTA" -> List.of("Ver artistas", "Ver mensajes", "Explorar obras", "Cómo comprar una obra", "Ayuda general");
             case "COMPRA_CARRITO_ORIENTACION" -> List.of("Explorar obras", "Ver solicitudes", "Ver mis compras", "Cómo vender mi arte", "Ayuda general");
             case "TRANSACCIONES_SEGUIMIENTO" -> List.of("Ver mis compras", "Ver mis ventas", "Ver solicitudes", "Cómo comprar una obra", "Ayuda general");
             case "SOLICITUDES_MENSAJES_ORIENTACION", "SOLICITUDES_GESTION" -> List.of("Ver solicitudes", "Ver mis compras", "Cómo comprar una obra", "Ver notificaciones", "Ayuda general");
             case "FAVORITOS_ORIENTACION" -> List.of("Ver favoritos", "Explorar obras", "Ver artistas", "Cómo comprar una obra", "Ayuda general");
-            case "METAS_PERSONALES_ORIENTACION" -> List.of("Ver mis metas", "Crear meta", "Ver portafolio", "Ver notificaciones", "Ayuda general");
             case "REPORTAR_CONTENIDO" -> List.of("Reportar contenido", "Explorar obras", "Seguridad de cuenta", "Ver solicitudes", "Ayuda general");
             case "CUENTA_SEGURIDAD_PRIVACIDAD" -> List.of("Ver perfil", "Recuperar contraseña", "Seguridad de cuenta", "Ver solicitudes", "Ayuda general");
-            case "CONVOCATORIAS_ORIENTACION" -> List.of("Ver convocatorias", "Explorar obras", "Subir obra", "Ver portafolio", "Ayuda general");
+            case "CONVOCATORIAS_ORIENTACION" -> List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
+            case "ESTADISTICAS_ADMIN_ORIENTACION" -> statisticsQuickRepliesForCurrentUser();
+            case "CONVOCATORIAS_ADMIN_ORIENTACION", "USUARIOS_ADMIN_ORIENTACION" -> adminQuickRepliesForCurrentUser();
+            case "MODERACION_REPORTES_ORIENTACION" -> moderationQuickRepliesForCurrentUser();
             case "MODERACION_ADMIN_ORIENTACION", "ADMIN_RESTRINGIDO_ORIENTACION" -> restrictedQuickRepliesForCurrentUser();
-            case "AYUDA_GENERAL_APP" -> List.of("Subir obra", "Subir servicio", "Explorar obras", "Cómo comprar una obra", "Seguridad de cuenta");
-            case "DEFAULT_WELCOME" -> List.of("Cómo subo una obra", "Subir servicio", "Ver portafolio", "Cómo comprar una obra", "Ayuda general");
-            case "DEFAULT_FALLBACK" -> List.of("Subir obra", "Subir servicio", "Explorar obras", "Recuperar contraseña", "Ayuda general");
-            default -> List.of("Ayuda general", "Subir obra", "Explorar obras");
+            case "AYUDA_GENERAL_APP" -> generalQuickRepliesForCurrentUser();
+            case "DEFAULT_WELCOME" -> List.of("Cómo subo una obra", "Explorar obras", "Ver convocatorias", "Ver mis metas", "Ayuda general");
+            case "DEFAULT_FALLBACK" -> List.of("Explorar obras", "Qué es una obra", "Qué es un servicio", "Qué es un artista", "Ayuda general");
+            default -> List.of("Ayuda general", "Explorar obras", "Ver convocatorias");
         };
+    }
+
+    private List<String> generalQuickRepliesForCurrentUser() {
+        if (hasRole("ADMIN")) {
+            return List.of("Ver estadísticas", "Editar convocatorias", "Gestionar usuarios", "Moderación", "Ayuda general");
+        }
+        return List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
     }
 
     private List<String> restrictedQuickRepliesForCurrentUser() {
         if (hasRole("ADMIN")) {
-            return List.of("Ver moderación", "Gestionar usuarios", "Ver convocatorias", "Ver notificaciones", "Ayuda general");
+            return List.of("Ver estadísticas", "Gestionar usuarios", "Editar convocatorias", "Moderación", "Ayuda general");
         }
         if (hasRole("MODERADOR")) {
-            return List.of("Ver moderación", "Reportar contenido", "Ver convocatorias", "Ver notificaciones", "Ayuda general");
+            return List.of("Moderación", "Ver convocatorias", "Ver notificaciones", "Reportar contenido", "Ayuda general");
         }
-        return List.of("Ayuda general", "Seguridad de cuenta", "Explorar obras", "Ver portafolio", "Ver solicitudes");
+        return List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
+    }
+
+    private List<String> adminQuickRepliesForCurrentUser() {
+        if (hasRole("ADMIN")) {
+            return List.of("Ver estadísticas", "Editar convocatorias", "Gestionar usuarios", "Moderación", "Ayuda general");
+        }
+        return List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
+    }
+
+    private List<String> moderationQuickRepliesForCurrentUser() {
+        if (hasRole("ADMIN")) {
+            return List.of("Moderación", "Ver estadísticas", "Editar convocatorias", "Gestionar usuarios", "Ayuda general");
+        }
+        if (hasRole("MODERADOR")) {
+            return List.of("Moderación", "Ver convocatorias", "Ver notificaciones", "Reportar contenido", "Ayuda general");
+        }
+        return List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
     }
 
     private List<ChatbotActionDTO> restrictedActionsForCurrentUser() {
         if (hasRole("ADMIN")) {
             return actions(
-                    action("Ver moderación", ChatbotActionType.NAV_MODERACION),
+                    action("Ver estadísticas de la plataforma", ChatbotActionType.NAV_ESTADISTICAS_PLATAFORMA),
                     action("Gestionar usuarios", ChatbotActionType.NAV_GESTION_USUARIOS),
-                    action("Ver convocatorias", ChatbotActionType.NAV_CONVOCATORIAS)
+                    action("Editar convocatorias", ChatbotActionType.NAV_GESTION_CONVOCATORIAS),
+                    action("Ver moderación", ChatbotActionType.NAV_MODERACION)
             );
         }
         if (hasRole("MODERADOR")) {
@@ -151,8 +194,54 @@ public class ChatbotIntentActionMapper {
         return List.of();
     }
 
+    private List<String> statisticsQuickRepliesForCurrentUser() {
+        if (hasRole("ADMIN")) {
+            return List.of("Ver estadísticas", "Editar convocatorias", "Gestionar usuarios", "Moderación", "Ayuda general");
+        }
+        if (hasRole("MODERADOR")) {
+            return List.of("Moderación", "Ver convocatorias", "Ver notificaciones", "Reportar contenido", "Ayuda general");
+        }
+        return List.of("Ver convocatorias", "Ver mis metas", "Explorar obras", "Seguridad de cuenta", "Ayuda general");
+    }
+
+    private List<ChatbotActionDTO> statisticsActionsForCurrentUser() {
+        if (!hasRole("ADMIN")) {
+            return List.of();
+        }
+        return actions(
+                action("Ver estadísticas de la plataforma", ChatbotActionType.NAV_ESTADISTICAS_PLATAFORMA)
+        );
+    }
+
+    private List<ChatbotActionDTO> adminConvocatoriasActionsForCurrentUser() {
+        if (!hasRole("ADMIN")) {
+            return List.of();
+        }
+        return actions(
+                action("Editar convocatorias", ChatbotActionType.NAV_GESTION_CONVOCATORIAS)
+        );
+    }
+
+    private List<ChatbotActionDTO> adminUsersActionsForCurrentUser() {
+        if (!hasRole("ADMIN")) {
+            return List.of();
+        }
+        return actions(
+                action("Gestionar usuarios", ChatbotActionType.NAV_GESTION_USUARIOS)
+        );
+    }
+
+    private List<ChatbotActionDTO> moderationActionsForCurrentUser() {
+        if (!hasRole("ADMIN") && !hasRole("MODERADOR")) {
+            return List.of();
+        }
+        return actions(
+                action("Ver moderación", ChatbotActionType.NAV_MODERACION)
+        );
+    }
+
     private List<String> loopBreakerQuickReplies() {
-        return List.of("Cómo comprar una obra", "Subir obra", "Subir servicio", "Ver solicitudes", "Ayuda general");
+        return List.of("Cómo comprar una obra", "Explorar obras", "Ver convocatorias", "Ver mis metas", "Ayuda general");
     }
 
     private LoopState recordIntent(String intent, String sessionId) {
@@ -245,6 +334,10 @@ public class ChatbotIntentActionMapper {
         String expectedAuthority = "ROLE_" + role.toUpperCase(Locale.ROOT);
         return authentication.getAuthorities().stream()
                 .anyMatch(authority -> expectedAuthority.equalsIgnoreCase(authority.getAuthority()));
+    }
+
+    public boolean currentUserHasRole(String role) {
+        return hasRole(role);
     }
 
     private List<ChatbotActionDTO> actions(ChatbotActionDTO... actions) {

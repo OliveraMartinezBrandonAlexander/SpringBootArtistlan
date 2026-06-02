@@ -309,6 +309,12 @@ public class ObraServiceImpl implements ObraService {
         log.info("ObraCrudBackendDebug DELETE validacion propietario OK idObra={} usuarioId={}", obraId, idUsuarioAutenticado);
         validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
+        cancelarSolicitudesActivasDeObra(
+                obraId,
+                "La obra fue eliminada por el artista.",
+                "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada por el artista.",
+                true
+        );
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
         int activasDespues = obraRepository.findPropiasActivasByUsuarioId(idUsuarioAutenticado, ESTADOS_NO_VISIBLES_PUBLICO).size();
         log.info("ObraCrudBackendDebug DELETE soft delete OK idObra={} usuarioId={} obrasActivasDespues={}",
@@ -330,6 +336,12 @@ public class ObraServiceImpl implements ObraService {
         validarPertenencia(obra, idUsuarioAutenticado);
         validarNoRetiradaPorModeracionParaEliminar(obra);
         validarEstadoParaEliminar(obra);
+        cancelarSolicitudesActivasDeObra(
+                id,
+                "La obra fue eliminada por el artista.",
+                "Tu solicitud para '%s' fue cancelada porque la obra fue eliminada por el artista.",
+                true
+        );
         ocultarObraLogicamente(obra, "Obra eliminada por el usuario");
         return true;
     }

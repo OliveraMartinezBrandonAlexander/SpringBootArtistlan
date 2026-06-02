@@ -8,7 +8,7 @@ import java.util.Locale;
 @Component
 public class ChatbotReplyFinalizer {
 
-    private static final String DEFAULT_CLOSING = "Necesitas ayuda con algo mas?";
+    private static final String DEFAULT_CLOSING = "Necesitas ayuda con algo m\u00e1s?";
 
     public String withNaturalClosing(String reply) {
         if (reply == null || reply.trim().isEmpty()) {
