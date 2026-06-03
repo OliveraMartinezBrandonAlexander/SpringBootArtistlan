@@ -23,7 +23,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -76,9 +75,8 @@ class ArtistlanMexicoTimezoneIntegrationTest {
         AdminSerieTemporalDTO ventasAntes =
                 adminEstadisticasService.obtenerVentasSemanales(hoyMexico);
 
-        Usuario usuario = usuarioRepository.findAll().stream()
-                .min(Comparator.comparing(Usuario::getIdUsuario))
-                .orElseThrow(() -> new IllegalStateException("No hay usuarios disponibles para la prueba."));
+        Usuario vendedor = crearUsuarioPrueba("vendedor-tz");
+        Usuario comprador = crearUsuarioPrueba("comprador-tz");
 
         Obra obra = obraRepository.saveAndFlush(Obra.builder()
                 .titulo("TZ Test " + UUID.randomUUID())
@@ -87,7 +85,7 @@ class ArtistlanMexicoTimezoneIntegrationTest {
                 .precio(new BigDecimal("123.45"))
                 .imagen1("https://artistlan.test/obra-timezone.jpg")
                 .confirmacionAutoria(Boolean.TRUE)
-                .usuario(usuario)
+                .usuario(vendedor)
                 .build());
 
         LocalDateTime fechaPublicacionMysql = consultarFechaMysql(
@@ -100,8 +98,8 @@ class ArtistlanMexicoTimezoneIntegrationTest {
 
         CompraObra compra = compraObraRepository.saveAndFlush(CompraObra.builder()
                 .obra(obra)
-                .comprador(usuario)
-                .vendedor(usuario)
+                .comprador(comprador)
+                .vendedor(vendedor)
                 .monto(new BigDecimal("123.45"))
                 .moneda("MXN")
                 .estado("CAPTURADA")
@@ -144,6 +142,19 @@ class ArtistlanMexicoTimezoneIntegrationTest {
 
         assertSinDatosFuturos(crecimientoDespues.getSerieSemanaActual(), hoyMexico);
         assertSinDatosFuturos(ventasDespues.getPuntos(), hoyMexico);
+    }
+
+    private Usuario crearUsuarioPrueba(String prefijo) {
+        String sufijoUnico = UUID.randomUUID().toString().replace("-", "");
+
+        return usuarioRepository.saveAndFlush(Usuario.builder()
+                .nombreCompleto("Usuario de prueba " + prefijo)
+                .usuario(prefijo + "_" + sufijoUnico)
+                .correo(prefijo + "_" + sufijoUnico + "@artistlan.test")
+                .contrasena("timezone-test-password")
+                .fechaNacimiento(LocalDate.of(1990, 1, 1))
+                .descripcion("Usuario temporal para pruebas de zona horaria")
+                .build());
     }
 
     private void assertFechaCercanaANowMexico(LocalDateTime fecha) {
