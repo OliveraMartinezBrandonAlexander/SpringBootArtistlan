@@ -139,7 +139,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
             }
 
             String captureId = extraerCaptureId(order);
-            LocalDateTime fechaCaptura = LocalDateTime.now();
+            LocalDateTime fechaCaptura = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
             compra.setPaypalCaptureId(captureId);
             compra.setEstado(ESTADO_CAPTURADA);
             compra.setFechaCaptura(fechaCaptura);
@@ -211,7 +211,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         if (!compradorId.equals(solicitud.getComprador().getIdUsuario())) {
             throw new BusinessException("El comprador no coincide con la reserva");
         }
-        if (reservadaHasta != null && reservadaHasta.isBefore(LocalDateTime.now())) {
+        if (reservadaHasta != null && reservadaHasta.isBefore(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico())) {
             throw new BusinessException("La reserva ya expiro");
         }
     }
@@ -301,7 +301,7 @@ public class PaypalPagoServiceImpl implements PaypalPagoService {
         compraExistente.setEstado(ESTADO_CREADA);
         compraExistente.setPaypalOrderId(paypalOrderId);
         compraExistente.setPaypalCaptureId(null);
-        compraExistente.setFechaCreacion(LocalDateTime.now());
+        compraExistente.setFechaCreacion(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         compraExistente.setFechaCaptura(null);
         return compraExistente;
     }

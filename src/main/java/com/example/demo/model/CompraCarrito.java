@@ -60,7 +60,7 @@ public class CompraCarrito {
     @PrePersist
     public void prePersist() {
         if (fechaCreacion == null) {
-            fechaCreacion = LocalDateTime.now();
+            fechaCreacion = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
         }
     }
 }

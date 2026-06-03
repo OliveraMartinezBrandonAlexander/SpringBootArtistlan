@@ -287,7 +287,7 @@ public class ServicioServiceImpl implements ServicioService {
         servicio.setPrecioMin(dto.getPrecioMin());
         servicio.setPrecioMax(dto.getPrecioMax());
         servicio.setUsuario(usuario);
-        servicio.setFechaPublicacion(LocalDateTime.now());
+        servicio.setFechaPublicacion(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
 
         Servicio guardado = repo.save(servicio);
         reemplazarCategoria(guardado, dto.getIdCategoria());
@@ -469,7 +469,7 @@ public class ServicioServiceImpl implements ServicioService {
         servicio.setOculto(Boolean.TRUE);
         servicio.setEstadoModeracion(EstadoModeracion.OCULTO);
         servicio.setMotivoOculto(motivo);
-        servicio.setFechaOculto(LocalDateTime.now());
+        servicio.setFechaOculto(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         repo.save(servicio);
         log.info("ServicioCrudBackendDebug soft delete ejecutado idServicio={} motivo={}", servicio.getIdServicio(), motivo);
     }

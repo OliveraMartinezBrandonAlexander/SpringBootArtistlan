@@ -47,7 +47,7 @@ public class Carrito {
     @PrePersist
     public void prePersist() {
         if (fechaAgregado == null) {
-            fechaAgregado = LocalDateTime.now();
+            fechaAgregado = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
         }
     }
 }

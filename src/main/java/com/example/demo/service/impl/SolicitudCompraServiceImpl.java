@@ -164,10 +164,10 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 obra.getIdObra(),
                 "PENDIENTE");
 
-        LocalDateTime expiracion = LocalDateTime.now().plusDays(DIAS_RESERVA);
+        LocalDateTime expiracion = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico().plusDays(DIAS_RESERVA);
 
         solicitud.setEstadoSolicitud("ACEPTADA");
-        solicitud.setFechaRespuesta(LocalDateTime.now());
+        solicitud.setFechaRespuesta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         solicitud.setFechaExpiracionReserva(expiracion);
 
         obra.setEstado("RESERVADA");
@@ -196,7 +196,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
                 obra.getIdObra(),
                 "PENDIENTE",
                 "RECHAZADA",
-                LocalDateTime.now(),
+                com.example.demo.util.ArtistlanDateTimeUtils.nowMexico(),
                 "Solicitud rechazada porque otra solicitud fue aceptada",
                 solicitud.getIdSolicitud());
 
@@ -241,7 +241,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         }
 
         solicitud.setEstadoSolicitud("RECHAZADA");
-        solicitud.setFechaRespuesta(LocalDateTime.now());
+        solicitud.setFechaRespuesta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         String motivoNormalizado = normalizarTextoOpcional(motivo);
         solicitud.setMotivoRechazo(motivoNormalizado);
         solicitudRepository.save(solicitud);
@@ -273,7 +273,7 @@ public class SolicitudCompraServiceImpl implements SolicitudCompraService {
         }
 
         solicitud.setEstadoSolicitud("CANCELADA");
-        solicitud.setFechaRespuesta(LocalDateTime.now());
+        solicitud.setFechaRespuesta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         solicitudRepository.save(solicitud);
 
         Carrito carrito = carritoRepository.findByObraIdObra(solicitud.getObra().getIdObra()).orElse(null);

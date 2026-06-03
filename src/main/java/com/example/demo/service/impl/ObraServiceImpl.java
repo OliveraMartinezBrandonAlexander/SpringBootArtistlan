@@ -264,7 +264,7 @@ public class ObraServiceImpl implements ObraService {
         Obra obra = new Obra();
         aplicarCamposCreacion(obra, obraDTO);
         obra.setUsuario(usuario);
-        obra.setFechaPublicacion(LocalDateTime.now());
+        obra.setFechaPublicacion(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
 
         Obra obraGuardada = obraRepository.save(obra);
         reemplazarCategoria(obraGuardada, obraDTO.getIdCategoria());
@@ -607,7 +607,7 @@ public class ObraServiceImpl implements ObraService {
             return;
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
         for (SolicitudCompraObra solicitud : activas) {
             solicitud.setEstadoSolicitud("CANCELADA");
             solicitud.setFechaRespuesta(ahora);
@@ -672,7 +672,7 @@ public class ObraServiceImpl implements ObraService {
         obra.setOculta(Boolean.TRUE);
         obra.setEstadoModeracion(EstadoModeracion.OCULTO);
         obra.setMotivoOculta(motivo);
-        obra.setFechaOculta(LocalDateTime.now());
+        obra.setFechaOculta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         obraRepository.save(obra);
         log.info("ObraCrudBackendDebug soft delete ejecutado idObra={} motivo={}", obra.getIdObra(), motivo);
     }

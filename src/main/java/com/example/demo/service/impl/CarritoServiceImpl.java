@@ -156,7 +156,7 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional
     public int limpiarReservasVencidas() {
-        List<Carrito> vencidas = carritoRepository.findReservasVencidas(LocalDateTime.now());
+        List<Carrito> vencidas = carritoRepository.findReservasVencidas(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
         int total = 0;
         for (Carrito carrito : vencidas) {
             expirarItem(carrito);
@@ -166,7 +166,7 @@ public class CarritoServiceImpl implements CarritoService {
     }
 
     private boolean debeExpirar(Carrito item) {
-        return item.getReservadaHasta() != null && item.getReservadaHasta().isBefore(LocalDateTime.now());
+        return item.getReservadaHasta() != null && item.getReservadaHasta().isBefore(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
     }
 
     private boolean esItemComprable(Carrito item) {
@@ -184,7 +184,7 @@ public class CarritoServiceImpl implements CarritoService {
 
         if (solicitud != null && ESTADO_ACEPTADA.equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
             solicitud.setEstadoSolicitud(ESTADO_EXPIRADA);
-            solicitud.setFechaRespuesta(LocalDateTime.now());
+            solicitud.setFechaRespuesta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
             solicitudRepository.save(solicitud);
         }
 
@@ -203,7 +203,7 @@ public class CarritoServiceImpl implements CarritoService {
 
         if (solicitud != null && ESTADO_ACEPTADA.equalsIgnoreCase(solicitud.getEstadoSolicitud())) {
             solicitud.setEstadoSolicitud(ESTADO_CANCELADA);
-            solicitud.setFechaRespuesta(LocalDateTime.now());
+            solicitud.setFechaRespuesta(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico());
             solicitud.setMotivoRechazo("Cancelada por comprador desde carrito");
             solicitudRepository.save(solicitud);
         }

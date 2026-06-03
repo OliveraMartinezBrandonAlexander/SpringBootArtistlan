@@ -209,51 +209,51 @@ public class AdminEstadisticasRepository {
         return query.getResultList();
     }
 
-    public List<Object[]> obtenerPublicacionesObrasPorDia(LocalDate inicio, LocalDate fin) {
+    public List<Object[]> obtenerPublicacionesObrasPorDia(LocalDateTime inicio, LocalDateTime finExclusive) {
         Query query = entityManager.createNativeQuery("""
                 SELECT DATE(o.fecha_publicacion) AS fecha, COUNT(*) AS total
                 FROM obra o
-                WHERE DATE(o.fecha_publicacion) >= :inicio
-                  AND DATE(o.fecha_publicacion) <= :fin
+                WHERE o.fecha_publicacion >= :inicio
+                  AND o.fecha_publicacion < :finExclusive
                   AND COALESCE(o.oculta, 0) = 0
                   AND UPPER(COALESCE(o.estado_moderacion, 'SIN_REPORTES')) NOT IN ('OCULTO', 'ELIMINADO_POR_MODERACION')
                 GROUP BY DATE(o.fecha_publicacion)
                 ORDER BY fecha ASC
                 """);
         query.setParameter("inicio", inicio);
-        query.setParameter("fin", fin);
+        query.setParameter("finExclusive", finExclusive);
         return query.getResultList();
     }
 
-    public List<Object[]> obtenerPublicacionesServiciosPorDia(LocalDate inicio, LocalDate fin) {
+    public List<Object[]> obtenerPublicacionesServiciosPorDia(LocalDateTime inicio, LocalDateTime finExclusive) {
         Query query = entityManager.createNativeQuery("""
                 SELECT DATE(s.fecha_publicacion) AS fecha, COUNT(*) AS total
                 FROM servicio s
-                WHERE DATE(s.fecha_publicacion) >= :inicio
-                  AND DATE(s.fecha_publicacion) <= :fin
+                WHERE s.fecha_publicacion >= :inicio
+                  AND s.fecha_publicacion < :finExclusive
                   AND COALESCE(s.oculto, 0) = 0
                   AND UPPER(COALESCE(s.estado_moderacion, 'SIN_REPORTES')) NOT IN ('OCULTO', 'ELIMINADO_POR_MODERACION')
                 GROUP BY DATE(s.fecha_publicacion)
                 ORDER BY fecha ASC
                 """);
         query.setParameter("inicio", inicio);
-        query.setParameter("fin", fin);
+        query.setParameter("finExclusive", finExclusive);
         return query.getResultList();
     }
 
-    public List<Object[]> obtenerArtistasNuevosPorDia(LocalDate inicio, LocalDate fin) {
+    public List<Object[]> obtenerArtistasNuevosPorDia(LocalDateTime inicio, LocalDateTime finExclusive) {
         Query query = entityManager.createNativeQuery("""
                 SELECT DATE(u.fecha_registro) AS fecha, COUNT(*) AS total
                 FROM usuario u
                 WHERE UPPER(COALESCE(u.rol, 'USER')) = 'USER'
                   AND UPPER(COALESCE(u.estado_cuenta, 'ACTIVO')) = 'ACTIVO'
-                  AND DATE(u.fecha_registro) >= :inicio
-                  AND DATE(u.fecha_registro) <= :fin
+                  AND u.fecha_registro >= :inicio
+                  AND u.fecha_registro < :finExclusive
                 GROUP BY DATE(u.fecha_registro)
                 ORDER BY fecha ASC
                 """);
         query.setParameter("inicio", inicio);
-        query.setParameter("fin", fin);
+        query.setParameter("finExclusive", finExclusive);
         return query.getResultList();
     }
 }

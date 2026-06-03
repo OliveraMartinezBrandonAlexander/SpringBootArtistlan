@@ -160,7 +160,7 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
             }
 
             String captureId = extraerCaptureId(order);
-            LocalDateTime fechaCaptura = LocalDateTime.now();
+            LocalDateTime fechaCaptura = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
             compraCarrito.setPaypalCaptureId(captureId);
             compraCarrito.setEstado(ESTADO_CAPTURADA);
             compraCarrito.setFechaCaptura(fechaCaptura);
@@ -239,7 +239,7 @@ public class PaypalCarritoServiceImpl implements PaypalCarritoService {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
                     "No puedes comprar tus propias obras.");
         }
-        if (item.getReservadaHasta() != null && item.getReservadaHasta().isBefore(LocalDateTime.now())) {
+        if (item.getReservadaHasta() != null && item.getReservadaHasta().isBefore(com.example.demo.util.ArtistlanDateTimeUtils.nowMexico())) {
             throw new BusinessException("La reserva de una obra expiro");
         }
         if (!"RESERVADA".equalsIgnoreCase(item.getObra().getEstado())) {

@@ -72,7 +72,7 @@ public class Servicio {
     @PrePersist
     public void prePersist() {
         if (fechaPublicacion == null) {
-            fechaPublicacion = LocalDateTime.now();
+            fechaPublicacion = com.example.demo.util.ArtistlanDateTimeUtils.nowMexico();
         }
     }
 }

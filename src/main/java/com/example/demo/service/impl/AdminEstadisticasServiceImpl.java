@@ -11,6 +11,7 @@ import com.example.demo.repository.AdminEstadisticasRepository;
 import com.example.demo.repository.AdminObservacionEstadisticaRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.AdminEstadisticasService;
+import com.example.demo.util.ArtistlanDateTimeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -68,12 +69,14 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
     @Override
     @Transactional(readOnly = true)
     public AdminSerieTemporalDTO obtenerVentasSemanales(LocalDate fechaReferencia) {
-        LocalDate fechaBase = fechaReferencia != null ? fechaReferencia : LocalDate.now();
+        LocalDate fechaBase = fechaReferencia != null ? fechaReferencia : ArtistlanDateTimeUtils.todayMexico();
+        LocalDate hoy = ArtistlanDateTimeUtils.todayMexico();
         RangoSemana rangoSemana = validarYConstruirSemana(fechaBase);
 
-        Map<LocalDate, ConteoMonto> acumulados = crearMapaSemanalVacio(rangoSemana.inicio(), rangoSemana.fin());
-        sumarSerieVentas(acumulados, adminEstadisticasRepository.obtenerVentasDirectasPorDia(rangoSemana.inicioDateTime(), rangoSemana.finExclusiveDateTime()));
-        sumarSerieVentas(acumulados, adminEstadisticasRepository.obtenerVentasCarritoPorDia(rangoSemana.inicioDateTime(), rangoSemana.finExclusiveDateTime()));
+        Map<LocalDate, ConteoMonto> acumuladosBase = crearMapaSemanalVacio(rangoSemana.inicio(), rangoSemana.fin());
+        sumarSerieVentas(acumuladosBase, adminEstadisticasRepository.obtenerVentasDirectasPorDia(rangoSemana.inicioDateTime(), rangoSemana.finExclusiveDateTime()));
+        sumarSerieVentas(acumuladosBase, adminEstadisticasRepository.obtenerVentasCarritoPorDia(rangoSemana.inicioDateTime(), rangoSemana.finExclusiveDateTime()));
+        Map<LocalDate, ConteoMonto> acumulados = ajustarSerieVentasSemanaActualEnCurso(acumuladosBase, rangoSemana, hoy);
 
         long totalVentas = acumulados.values().stream().mapToLong(ConteoMonto::conteo).sum();
         BigDecimal totalIngresos = acumulados.values().stream()
@@ -121,34 +124,34 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
     @Override
     @Transactional(readOnly = true)
     public AdminCrecimientoDTO obtenerCrecimientoSemanal(AdminDashboardTipo tipo, LocalDate fechaReferencia) {
-        LocalDate fechaBase = fechaReferencia != null ? fechaReferencia : LocalDate.now();
-        LocalDate hoy = LocalDate.now();
+        LocalDate fechaBase = fechaReferencia != null ? fechaReferencia : ArtistlanDateTimeUtils.todayMexico();
+        LocalDate hoy = ArtistlanDateTimeUtils.todayMexico();
         RangoSemana semanaActual = validarYConstruirSemana(fechaBase);
         RangoSemana semanaAnterior = construirSemanaAnterior(semanaActual);
 
         Map<LocalDate, Long> serieActualBase = switch (tipo) {
             case OBRAS -> construirSerieConteo(semanaActual.inicio(), semanaActual.fin(),
                     adminEstadisticasRepository.obtenerPublicacionesObrasPorDia(
-                            semanaActual.inicio(), semanaActual.fin()));
+                            semanaActual.inicioDateTime(), semanaActual.finExclusiveDateTime()));
             case SERVICIOS -> construirSerieConteo(semanaActual.inicio(), semanaActual.fin(),
                     adminEstadisticasRepository.obtenerPublicacionesServiciosPorDia(
-                            semanaActual.inicio(), semanaActual.fin()));
+                            semanaActual.inicioDateTime(), semanaActual.finExclusiveDateTime()));
             case ARTISTAS -> construirSerieConteo(semanaActual.inicio(), semanaActual.fin(),
                     adminEstadisticasRepository.obtenerArtistasNuevosPorDia(
-                            semanaActual.inicio(), semanaActual.fin()));
+                            semanaActual.inicioDateTime(), semanaActual.finExclusiveDateTime()));
         };
         Map<LocalDate, Long> serieActual = ajustarSerieSemanaActualEnCurso(serieActualBase, semanaActual, hoy);
 
         Map<LocalDate, Long> serieAnterior = switch (tipo) {
             case OBRAS -> construirSerieConteo(semanaAnterior.inicio(), semanaAnterior.fin(),
                     adminEstadisticasRepository.obtenerPublicacionesObrasPorDia(
-                            semanaAnterior.inicio(), semanaAnterior.fin()));
+                            semanaAnterior.inicioDateTime(), semanaAnterior.finExclusiveDateTime()));
             case SERVICIOS -> construirSerieConteo(semanaAnterior.inicio(), semanaAnterior.fin(),
                     adminEstadisticasRepository.obtenerPublicacionesServiciosPorDia(
-                            semanaAnterior.inicio(), semanaAnterior.fin()));
+                            semanaAnterior.inicioDateTime(), semanaAnterior.finExclusiveDateTime()));
             case ARTISTAS -> construirSerieConteo(semanaAnterior.inicio(), semanaAnterior.fin(),
                     adminEstadisticasRepository.obtenerArtistasNuevosPorDia(
-                            semanaAnterior.inicio(), semanaAnterior.fin()));
+                            semanaAnterior.inicioDateTime(), semanaAnterior.finExclusiveDateTime()));
         };
 
         long totalActual = serieActual.values().stream().mapToLong(Long::longValue).sum();
@@ -266,7 +269,7 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
         observacion.setFechaFinPeriodo(request.getFechaFinPeriodo());
         observacion.setObservacion(request.getObservacion().trim());
         observacion.setAdmin(adminEditor);
-        observacion.setFechaActualizacion(LocalDateTime.now());
+        observacion.setFechaActualizacion(ArtistlanDateTimeUtils.nowMexico());
 
         AdminObservacionEstadistica observacionGuardada = adminObservacionEstadisticaRepository.saveAndFlush(observacion);
         AdminObservacionEstadistica observacionActualizada = adminObservacionEstadisticaRepository.findDetalleById(observacionGuardada.getIdObservacion())
@@ -351,6 +354,44 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
         return serie;
     }
 
+    private Map<LocalDate, ConteoMonto> ajustarSerieVentasSemanaActualEnCurso(Map<LocalDate, ConteoMonto> serieOriginal,
+                                                                               RangoSemana rangoSemana,
+                                                                               LocalDate hoy) {
+        if (hoy.isBefore(rangoSemana.inicio()) || hoy.isAfter(rangoSemana.fin())) {
+            return serieOriginal;
+        }
+
+        Map<LocalDate, ConteoMonto> serieAjustada = new LinkedHashMap<>();
+        long conteoPosterior = 0L;
+        BigDecimal montoPosterior = BigDecimal.ZERO;
+
+        for (Map.Entry<LocalDate, ConteoMonto> entry : serieOriginal.entrySet()) {
+            LocalDate fecha = entry.getKey();
+            ConteoMonto valor = entry.getValue() != null ? entry.getValue() : new ConteoMonto(0L, BigDecimal.ZERO);
+
+            if (fecha.isAfter(hoy)) {
+                conteoPosterior += Math.max(0L, valor.conteo());
+                montoPosterior = montoPosterior.add(valor.monto() != null ? valor.monto() : BigDecimal.ZERO);
+                serieAjustada.put(fecha, new ConteoMonto(0L, BigDecimal.ZERO));
+                continue;
+            }
+
+            serieAjustada.put(fecha, new ConteoMonto(
+                    Math.max(0L, valor.conteo()),
+                    valor.monto() != null ? valor.monto() : BigDecimal.ZERO
+            ));
+        }
+
+        if ((conteoPosterior > 0L || montoPosterior.signum() > 0) && serieAjustada.containsKey(hoy)) {
+            ConteoMonto actual = serieAjustada.get(hoy);
+            serieAjustada.put(hoy, new ConteoMonto(
+                    actual.conteo() + conteoPosterior,
+                    actual.monto().add(montoPosterior)
+            ));
+        }
+        return serieAjustada;
+    }
+
     private Map<LocalDate, Long> ajustarSerieSemanaActualEnCurso(Map<LocalDate, Long> serieOriginal,
                                                                  RangoSemana semanaActual,
                                                                  LocalDate hoy) {
@@ -403,7 +444,7 @@ public class AdminEstadisticasServiceImpl implements AdminEstadisticasService {
     }
 
     private RangoSemana validarYConstruirSemana(LocalDate fechaReferencia) {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = ArtistlanDateTimeUtils.todayMexico();
         LocalDate inicioSemana = fechaReferencia.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate inicioSemanaActual = hoy.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
